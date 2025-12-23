@@ -41,6 +41,15 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+@app.get("/", include_in_schema=False)
+async def root():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/docs")
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy", "service": "assessment-generator"}
+
 @app.get("/status/{course_id}")
 async def check_status(course_id: str):
     status = await get_assessment_status(course_id)
