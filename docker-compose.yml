@@ -1,0 +1,55 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: myuser
+      POSTGRES_PASSWORD: mypassword
+      POSTGRES_DB: karmayogi_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  api:
+    build: .
+    environment:
+      - DB_DSN=postgresql://myuser:mypassword@db:5432/karmayogi_db
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_LOCATION=${GOOGLE_LOCATION}
+      - GENAI_MODEL_NAME=${GENAI_MODEL_NAME}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+      - KARMAYOGI_API_KEY=${KARMAYOGI_API_KEY}
+    volumes:
+      - .:/app
+      - course_data:/app/interactive_courses_data
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    command: uvicorn assessment.api:app --host 0.0.0.0 --port 8000
+    environment:
+      - PYTHONPATH=/app/src
+      - DB_DSN=postgresql://myuser:mypassword@db:5432/karmayogi_db
+      - GOOGLE_PROJECT_ID=${GOOGLE_PROJECT_ID}
+      - GOOGLE_LOCATION=${GOOGLE_LOCATION}
+      - GENAI_MODEL_NAME=${GENAI_MODEL_NAME}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials.json
+      - KARMAYOGI_API_KEY=${KARMAYOGI_API_KEY}
+
+  ui:
+    build: .
+    environment:
+      - API_URL=http://api:8000
+    volumes:
+      - .:/app
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api
+    command: streamlit run ui/app.py --server.port 8501 --server.address 0.0.0.0
+
+volumes:
+  postgres_data:
+  course_data:
