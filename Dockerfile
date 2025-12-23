@@ -8,21 +8,24 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy local dependencies first to leverage Docker cache
+# Copy packaging files + source BEFORE pip install
 COPY pyproject.toml .
+COPY src ./src
+COPY README.md .
+
+# Install the app
 RUN pip install --no-cache-dir .
 
-# Copy the rest of the application
+# Copy remaining files (scripts, ui, etc.)
 COPY . .
 
 # Create directory for course data
 RUN mkdir -p interactive_courses_data
 
-# Expose ports for FastAPI and Streamlit
 EXPOSE 8000
 EXPOSE 8501
 
 ENV PYTHONPATH=/app/src
 
-# Command to run both will be handled by docker-compose or a shell script
 CMD ["uvicorn", "assessment.api:app", "--host", "0.0.0.0", "--port", "8000"]
+
