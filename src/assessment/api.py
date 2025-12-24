@@ -5,7 +5,7 @@ import json
 import pandas as pd
 from pathlib import Path
 from typing import List, Optional
-from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException, APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
 
@@ -35,29 +35,36 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down Assessment API...")
 
 app = FastAPI(
-    title="Course Assessment Generator API",
-    description="Audit-ready assessment generation using Gemini 1.5 Pro",
+    title="Course Assessment Generator API (v1.0)",
+    description="Audit-ready assessment generation using Gemini 2.5 Pro | Prompt v3.1",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    root_path="/ai-assment-generation",
+    servers=[{"url": "/ai-assment-generation", "description": "Default Server"}],
+    docs_url="/docs",
+    openapi_url="/openapi.json"
 )
+
+# Routers
+api_v1_router = APIRouter(prefix="/api/v1")
 
 @app.get("/", include_in_schema=False)
 async def root():
     from fastapi.responses import RedirectResponse
-    return RedirectResponse(url="/docs")
+    return RedirectResponse(url="/ai-assment-generation/docs")
 
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "assessment-generator"}
 
-@app.get("/status/{course_id}")
+@api_v1_router.get("/status/{course_id}")
 async def check_status(course_id: str):
     status = await get_assessment_status(course_id)
     if not status:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND"})
     return status
 
-@app.post("/generate")
+@api_v1_router.post("/generate")
 async def generate(
     background_tasks: BackgroundTasks,
     course_id: str = Form(...),
@@ -66,6 +73,7 @@ async def generate(
     difficulty: str = Form("Intermediate"),
     total_questions: int = Form(5),
     additional_instructions: Optional[str] = Form(None),
+    language: str = Form("English"),
     files: List[UploadFile] = File(None)
 ):
     existing = await get_assessment_status(course_id)
@@ -87,10 +95,10 @@ async def generate(
                 shutil.copyfileobj(file.file, buffer)
             saved_files.append(file_path)
 
-    background_tasks.add_task(process_course_task, course_id, saved_files, assessment_type, difficulty, total_questions, additional_instructions)
+    background_tasks.add_task(process_course_task, course_id, saved_files, assessment_type, difficulty, total_questions, additional_instructions, language)
     return {"message": "Generation started", "status": "PENDING"}
 
-async def process_course_task(course_id: str, extra_files: List[Path], assessment_type: str, difficulty: str, total_questions: int, additional_instructions: Optional[str]):
+async def process_course_task(course_id: str, extra_files: List[Path], assessment_type: str, difficulty: str, total_questions: int, additional_instructions: Optional[str], language: str):
     try:
         await update_job_status(course_id, "IN_PROGRESS")
         
@@ -113,7 +121,8 @@ async def process_course_task(course_id: str, extra_files: List[Path], assessmen
             assessment_type=assessment_type, 
             difficulty_level=difficulty, 
             total_questions=total_questions,
-            additional_instructions=additional_instructions
+            additional_instructions=additional_instructions,
+            input_language=language
         )
         
         # 4. Save Result
@@ -123,7 +132,7 @@ async def process_course_task(course_id: str, extra_files: List[Path], assessmen
         logger.exception(f"Job failed for {course_id}")
         await update_job_status(course_id, "FAILED", str(e))
 
-@app.get("/download/{course_id}")
+@api_v1_router.get("/download/{course_id}")
 async def download_csv(course_id: str):
     data = await get_assessment_status(course_id)
     if not data or data['status'] != 'COMPLETED':
@@ -155,7 +164,7 @@ async def download_csv(course_id: str):
     
     return FileResponse(csv_path, filename=f"{course_id}_assessment.csv")
 
-@app.get("/download_json/{course_id}")
+@api_v1_router.get("/download_json/{course_id}")
 async def download_json(course_id: str):
     data = await get_assessment_status(course_id)
     if not data or data['status'] != 'COMPLETED':
@@ -168,3 +177,5 @@ async def download_json(course_id: str):
         json.dump(assessment_json, f, indent=2, ensure_ascii=False)
         
     return FileResponse(json_path, filename=f"{course_id}_assessment.json", media_type='application/json')
+
+app.include_router(api_v1_router)

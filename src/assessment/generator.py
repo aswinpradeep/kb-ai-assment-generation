@@ -53,6 +53,7 @@ def load_json(filename):
 ASSESSMENT_PROMPTS = load_yaml('prompts.yaml')
 ASSESSMENT_SCHEMA_FILE = load_json('schemas.json')
 ASSESSMENT_SCHEMA = ASSESSMENT_SCHEMA_FILE.get('full_schema', {})
+KCM_DATASET = load_json('competencies.json')
 
 async def generate_assessment(
     course_folder: Path, 
@@ -60,7 +61,8 @@ async def generate_assessment(
     difficulty_level: str = "Intermediate", 
     total_questions: int = 5,
     time_to_complete: Optional[str] = None,
-    additional_instructions: Optional[str] = None
+    additional_instructions: Optional[str] = None,
+    input_language: str = "English"
 ) -> Tuple[Dict, Dict, Dict]:
     """
     Generates assessment for a course folder.
@@ -94,7 +96,7 @@ async def generate_assessment(
     prompt = build_prompt(
         course_id, current_metadata, transcript, pdf_snippets_str,
         assessment_type, difficulty_level, total_questions, time_to_complete,
-        additional_instructions
+        additional_instructions, input_language
     )
 
     # 5. Call LLM
@@ -116,7 +118,8 @@ def build_prompt(
     difficulty_level: str,
     total_questions: int,
     time_to_complete: Optional[str],
-    additional_instructions: Optional[str]
+    additional_instructions: Optional[str],
+    input_language: str
 ) -> str:
     prompt_template = ASSESSMENT_PROMPTS.get('system_prompt_template', '')
     
@@ -125,6 +128,8 @@ def build_prompt(
     prompt = prompt.replace("{metadata}", json.dumps(current_metadata, indent=2))
     prompt = prompt.replace("{content_context}", f"Transcript:\n{transcript}\n\nPDF Extracts:\n{pdf_snippets}")
     prompt = prompt.replace("{additional_instructions}", additional_instructions or "None provided")
+    prompt = prompt.replace("{input_language}", input_language)
+    prompt = prompt.replace("{kcm_dataset}", json.dumps(KCM_DATASET, indent=2))
     
     prompt = prompt.replace("{assessment_type}", assessment_type)
     prompt = prompt.replace("{difficulty_level}", difficulty_level)
@@ -139,6 +144,8 @@ def build_prompt(
         blooms_dist = "Remember: 20%, Understand: 25%, Apply: 25%, Analyze: 20%, Evaluate: 10%"
     
     prompt = prompt.replace("{blooms_dist}", blooms_dist)
+    prompt = prompt.replace("{p_version}", "v3.1")
+    prompt = prompt.replace("{a_version}", "api/v1")
 
     return prompt
 

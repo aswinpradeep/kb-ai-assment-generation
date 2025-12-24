@@ -20,7 +20,7 @@ def verify():
 
     # 2. Check Resources
     pkg_res_path = base_path / "src" / "assessment" / "resources"
-    resources = ["prompts.yaml", "schemas.json"]
+    resources = ["prompts.yaml", "schemas.json", "competencies.json"]
     for res in resources:
         res_path = pkg_res_path / res
         if res_path.exists():

@@ -60,13 +60,22 @@
           },
           "time_appropriateness_validation": {
             "type": "string"
+          },
+          "prompt_version": {
+            "type": "string"
+          },
+          "api_version": {
+            "type": "string"
           }
         },
         "required": [
           "assessment_scope_summary",
           "courses_covered",
           "unified_competency_map",
-          "smart_learning_objectives"
+          "smart_learning_objectives",
+          "time_appropriateness_validation",
+          "prompt_version",
+          "api_version"
         ]
       },
       "questions": {
@@ -123,16 +132,32 @@
                     "competency_alignment": {
                       "type": "object",
                       "properties": {
-                        "functional": {
-                          "type": "string"
-                        },
-                        "behavioral": {
-                          "type": "string"
+                        "kcm": {
+                          "type": "object",
+                          "properties": {
+                            "competency_area": {
+                              "type": "string"
+                            },
+                            "competency_theme": {
+                              "type": "string"
+                            },
+                            "competency_sub_theme": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "competency_area",
+                            "competency_theme",
+                            "competency_sub_theme"
+                          ]
                         },
                         "domain": {
                           "type": "string"
                         }
-                      }
+                      },
+                      "required": [
+                        "kcm"
+                      ]
                     },
                     "blooms_level_justification": {
                       "type": "string"
@@ -188,7 +213,54 @@
                   "type": "string"
                 },
                 "reasoning": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "learning_objective_alignment": {
+                      "type": "string"
+                    },
+                    "competency_alignment": {
+                      "type": "object",
+                      "properties": {
+                        "kcm": {
+                          "type": "object",
+                          "properties": {
+                            "competency_area": {
+                              "type": "string"
+                            },
+                            "competency_theme": {
+                              "type": "string"
+                            },
+                            "competency_sub_theme": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "competency_area",
+                            "competency_theme",
+                            "competency_sub_theme"
+                          ]
+                        },
+                        "domain": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kcm"
+                      ]
+                    },
+                    "blooms_level_justification": {
+                      "type": "string"
+                    },
+                    "difficulty_justification": {
+                      "type": "string"
+                    },
+                    "question_type_rationale": {
+                      "type": "string"
+                    },
+                    "assessment_type_relevance": {
+                      "type": "string"
+                    }
+                  }
                 },
                 "relevance_percentage": {
                   "type": "integer"
@@ -241,7 +313,54 @@
                   "type": "string"
                 },
                 "reasoning": {
-                  "type": "object"
+                  "type": "object",
+                  "properties": {
+                    "learning_objective_alignment": {
+                      "type": "string"
+                    },
+                    "competency_alignment": {
+                      "type": "object",
+                      "properties": {
+                        "kcm": {
+                          "type": "object",
+                          "properties": {
+                            "competency_area": {
+                              "type": "string"
+                            },
+                            "competency_theme": {
+                              "type": "string"
+                            },
+                            "competency_sub_theme": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "competency_area",
+                            "competency_theme",
+                            "competency_sub_theme"
+                          ]
+                        },
+                        "domain": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kcm"
+                      ]
+                    },
+                    "blooms_level_justification": {
+                      "type": "string"
+                    },
+                    "difficulty_justification": {
+                      "type": "string"
+                    },
+                    "question_type_rationale": {
+                      "type": "string"
+                    },
+                    "assessment_type_relevance": {
+                      "type": "string"
+                    }
+                  }
                 },
                 "relevance_percentage": {
                   "type": "integer"

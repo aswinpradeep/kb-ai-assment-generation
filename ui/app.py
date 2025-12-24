@@ -3,12 +3,21 @@ import requests
 import time
 import pandas as pd
 import json
+import os
+from dotenv import load_dotenv
 
-API_URL = "http://localhost:8000"
+# Load local .env if present
+load_dotenv()
 
-st.set_page_config(page_title="Assessment Generator", layout="wide")
+# Read API_URL from environment or fallback
+API_URL = os.getenv("API_URL", "http://localhost:8000")
+# Append the versioned path if not already present
+if not API_URL.endswith("/ai-assment-generation/api/v1"):
+    API_URL = f"{API_URL.rstrip('/')}/ai-assment-generation/api/v1"
 
-st.title("Course Assessment Generator")
+st.set_page_config(page_title="Assessment Generator v3.1", layout="wide")
+
+st.title("Course Assessment Generator (Prompt v3.1)")
 
 course_id = st.text_input("Enter Course ID", placeholder="do_1234567890")
 
@@ -35,13 +44,18 @@ if course_id:
     if status == "NOT_FOUND" or status == "FAILED" or (status == "COMPLETED" and st.checkbox("Force Regenerate")):
         st.subheader("Generate Assessment")
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         with col1:
             assessment_type = st.selectbox("Assessment Type", ["practice", "final", "comprehensive"], index=1)
         with col2:
             difficulty = st.selectbox("Difficulty", ["Beginner", "Intermediate", "Advanced"], index=1)
         with col3:
             total_questions = st.number_input("Total Questions (per type)", min_value=1, max_value=20, value=5)
+        with col4:
+            language = st.selectbox(
+                "Language Selection", 
+                ["English", "Hindi", "Bengali", "Gujarati", "Kannada", "Malayalam", "Marathi", "Tamil", "Telugu", "Urdu"]
+            )
 
         uploaded_files = st.file_uploader("Upload extra PDFs (Optional)", accept_multiple_files=True, type=['pdf'])
         additional_instructions = st.text_area("Additional Instructions (SME notes, exclusions, priorities)", placeholder="e.g. Focus on Chapter 3, exclude technical jargon...")
@@ -58,7 +72,8 @@ if course_id:
                 'assessment_type': assessment_type,
                 'difficulty': difficulty,
                 'total_questions': total_questions,
-                'additional_instructions': additional_instructions
+                'additional_instructions': additional_instructions,
+                'language': language
             }
             
             with st.spinner("Initiating job..."):
@@ -106,7 +121,9 @@ if course_id:
         tab1, tab2 = st.tabs(["Blueprint", "Questions"])
         
         with tab1:
-            st.json(assessment_data.get("blueprint", {}))
+            blueprint = assessment_data.get("blueprint", {})
+            st.info(f"**Audit Info:** Prompt {blueprint.get('prompt_version', 'N/A')} | API {blueprint.get('api_version', 'N/A')}")
+            st.json(blueprint)
             
         with tab2:
             questions = assessment_data.get("questions", {})
@@ -123,7 +140,22 @@ if course_id:
                                 st.write(f"- {p['left']} → {p['right']}")
                         else:
                             st.info(f"Answer: {q.get('correct_answer')}")
-                        st.caption(f"Reasoning: {q.get('reasoning', {}).get('question_type_rationale')}")
+                        
+                        # Explainability Section
+                        reasoning = q.get('reasoning', {})
+                        kcm = reasoning.get('competency_alignment', {}).get('kcm', {})
+                        
+                        rel_pct = q.get('relevance_percentage', 0)
+                        st.write(f"**Relevance:** `{rel_pct}%` | **Bloom:** `{q.get('blooms_level', 'N/A')}`")
+                        
+                        with st.expander("View SME Alignment & Reasoning"):
+                            st.markdown(f"**Learning Objective:** {reasoning.get('learning_objective_alignment')}")
+                            st.markdown(f"**KCM Competency:** {kcm.get('competency_area')} → {kcm.get('competency_theme')} → {kcm.get('competency_sub_theme')}")
+                            if reasoning.get('competency_alignment', {}).get('domain'):
+                                st.markdown(f"**Domain Mapping:** {reasoning.get('competency_alignment', {}).get('domain')}")
+                            st.markdown(f"**Bloom Justification:** {reasoning.get('blooms_level_justification')}")
+                            st.markdown(f"**Difficulty Justification:** {reasoning.get('difficulty_justification')}")
+                            st.markdown(f"**Rationale:** {reasoning.get('question_type_rationale')}")
                         st.divider()
         
         # Download

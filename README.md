@@ -1,12 +1,13 @@
-# Course Assessment Generation POC
+# Course Assessment Generation POC (v3.1)
 
-An advanced, audit-ready assessment generation system powered by Google Gemini, FastAPI, and Streamlit. This POC follows Senior Instructional Designer logic to generate blueprints and questions with detailed pedagogic reasoning.
+An advanced, audit-ready assessment generation system powered by **Google Gemini 2.5 Pro**, FastAPI, and Streamlit. This POC follows Senior Instructional Designer logic (Prompt v3.1) to generate blueprints and questions with detailed pedagogic reasoning.
 
 ## Features
+- **Model**: Powered by `gemini-2.5-pro`.
 - **3 Assessment Types**: Practice (Reinforcement), Final (Certification), and Comprehensive (Cross-course).
-- **Multi-Source Content**: Analyzes Transcripts (VTT) and PDFs automatically.
-- **Pedagogic Governance**: Strictly follows Bloom's Taxonomy and cognitive difficulty mapping.
-- **Explainable-AI**: Every question comes with alignment reasoning (Learning Objectives, Competencies, Bloom's Justification).
+- **Multilingual Support**: Supports 10+ Indian languages (Hindi, Tamil, Telugu, etc.).
+- **KCM Alignment**: Maps questions strictly to the **Karmayogi Competency Model** (Behavioral/Functional).
+- **Explainable-AI**: Every question comes with alignment reasoning (Learning Objectives, KCM Competencies, Bloom's Justification).
 - **Exportable Results**: Download assessments in structured JSON or flattened CSV formats.
 
 ---
@@ -21,7 +22,7 @@ An advanced, audit-ready assessment generation system powered by Google Gemini, 
 
 ### Initial Setup
 1. Clone this repository to your local machine.
-2. Create a `.env` file in the root directory (see `.env.example`).
+2. Create a `.env` file in the root directory (see `DEPLOYMENT.md`).
 3. Place your Google Application Credentials JSON file in the root as `credentials.json`.
 
 ### Method 1: Docker (Recommended)
@@ -49,32 +50,32 @@ docker-compose up --build
 
 ---
 
-## Project Structure
-- `src/assessment/`: Core package containing API, Generator, Fetcher, and DB models.
-- `src/assessment/resources/`: Prompts and Schemas.
-- `ui/`: Streamlit frontend.
-- `scripts/`: Verification and utility scripts.
-- `docker-compose.yml`: Orchestration for Postgres, API, and UI.
+## API Documentation (v1)
 
----
+- **Common Project Path**: `/ai-assment-generation`
+- **Interactive Documentation**: `http://localhost:8000/ai-assment-generation/docs`
+- **API Base URL**: `http://localhost:8000/ai-assment-generation/api/v1`
+- **OpenAPI Schema**: `http://localhost:8000/ai-assment-generation/openapi.json`
 
 ### 1. `POST /generate`
 Triggers the background process to fetch content and generate an assessment.
-- **Params**:
+- **Form Data**:
   - `course_id` (str): The do_id of the course.
   - `assessment_type` (str): `practice`, `final`, or `comprehensive`.
   - `difficulty` (str): `Beginner`, `Intermediate`, `Advanced`.
   - `total_questions` (int): Number of questions *per type* (total = N * 3).
+  - `language` (str): Target language (English, Hindi, etc.).
+  - `additional_instructions` (str): SME notes.
   - `files` (Optional): Extra PDFs to include in analysis.
 
 ### 2. `GET /status/{course_id}`
-Returns the current status (`PENDING`, `IN_PROGRESS`, `COMPLETED`, `FAILED`) and result data if finished.
+Returns current status and result data.
 
 ### 3. `GET /download/{course_id}`
 Downloads the assessment as a flattened CSV.
 
 ### 4. `GET /download_json/{course_id}`
-Downloads the raw structured JSON (Blueprint + Questions).
+Downloads the raw structured JSON.
 
 ---
 
@@ -91,10 +92,10 @@ formData.append('course_id', 'do_12345');
 formData.append('assessment_type', 'final');
 formData.append('difficulty', 'Intermediate');
 formData.append('total_questions', 5);
+formData.append('language', 'Hindi');
 formData.append('additional_instructions', 'Focus more on module 2');
-// Optional: files
-// formData.append('files', fileBlob, 'notes.pdf');
 
+// Base URL: http://localhost:8000/ai-assment-generation/api/v1
 const response = await fetch('/generate', { method: 'POST', body: formData });
 ```
 
@@ -113,24 +114,23 @@ The `assessment_data` field contains a JSON string (or object) with two main bra
 
 #### **`blueprint`**
 Use this to display the "Audit" or "Design rationale" to the user.
-- Fields: `assessment_scope_summary`, `smart_learning_objectives`, `unified_competency_map`.
+- Fields: `assessment_scope_summary`, `smart_learning_objectives`, `unified_competency_map`, `time_appropriateness_validation`.
 
 #### **`questions`**
 Contains three arrays: `Multiple Choice Question`, `FTB Question`, and `MTF Question`.
-- **MCQ**: Render `options`, then map `correct_option_index` for validation.
-- **FTB**: Render text with a text input. Use `correct_answer` for validation.
-- **MTF**: Render two matching columns from the `pairs` array.
-- **Reasoning**: Every question has a `reasoning` object. Display this in an "info" tooltip or "SME Feedback" toggle to provide transparency.
+- **Reasoning**: Every question has a `reasoning` object containing:
+  - `learning_objective_alignment`
+  - `competency_alignment`: Nested object with `kcm` (area, theme, sub_theme) and `domain`.
+  - `blooms_level_justification`
+  - `relevance_percentage`: 0-100 score.
 
 ### 4. Direct Downloads
-Provide buttons that link directly to:
-- `http://api-url/download/{course_id}` (CSV)
-- `http://api-url/download_json/{course_id}` (JSON)
+- `http://api-url/ai-assment-generation/api/v1/download/{course_id}` (CSV)
+- `http://api-url/ai-assment-generation/api/v1/download_json/{course_id}` (JSON)
 
 ---
 
 ## Core Governance Rules
 - Hallucination is strictly avoided by anchoring prompts to extracted transcripts and PDFs.
-- Difficulty is cognitive, not linguistic.
-- MTF questions use balanced pairs (no giveaways).
-- MCQ questions avoid "All of the above".
+- **KCM Mapping**: All competencies must be sourced from the authoritative KCM Dataset.
+- All output text (objectives, questions, reasoning) is generated in the selected language.

@@ -18,9 +18,8 @@ COPY . .
 # Create directory for course data
 RUN mkdir -p interactive_courses_data
 
-# Expose ports for FastAPI and Streamlit
+# Expose port for FastAPI
 EXPOSE 8000
-EXPOSE 8501
 
 ENV PYTHONPATH=/app/src
 

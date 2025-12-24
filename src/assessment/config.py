@@ -27,7 +27,7 @@ INTERACTIVE_COURSES_PATH = os.path.join(ROOT_DIR, "interactive_courses_data")
 # Google GenAI
 GOOGLE_PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")
 GOOGLE_LOCATION = os.getenv("GOOGLE_LOCATION", "us-central1")
-GENAI_MODEL_NAME = os.getenv("GENAI_MODEL_NAME", "gemini-1.5-pro")
+GENAI_MODEL_NAME = os.getenv("GENAI_MODEL_NAME", "gemini-2.5-pro")
 GOOGLE_APPLICATION_CREDENTIALS = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
 # Headers for Karmayogi API
