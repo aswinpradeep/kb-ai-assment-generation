@@ -44,34 +44,95 @@ if course_id:
     if status == "NOT_FOUND" or status == "FAILED" or (status == "COMPLETED" and st.checkbox("Force Regenerate")):
         st.subheader("Generate Assessment")
         
-        col1, col2, col3, col4 = st.columns(4)
+        # Step 1: Core Config
+        col1, col2, col3 = st.columns(3)
         with col1:
-            assessment_type = st.selectbox("Assessment Type", ["practice", "final", "comprehensive"], index=1)
+            assessment_type = st.selectbox("Assessment Type", ["practice", "final", "comprehensive"])
         with col2:
-            difficulty = st.selectbox("Difficulty", ["Beginner", "Intermediate", "Advanced"], index=1)
+            difficulty = st.selectbox("Difficulty", ["beginner", "intermediate", "advanced"], index=1)
         with col3:
-            total_questions = st.number_input("Total Questions (per type)", min_value=1, max_value=20, value=5)
-        with col4:
             language = st.selectbox(
                 "Language Selection", 
-                ["English", "Hindi", "Bengali", "Gujarati", "Kannada", "Malayalam", "Marathi", "Tamil", "Telugu", "Urdu"]
+                ["english", "hindi", "bengali", "gujarati", "kannada", "malayalam", "marathi", "tamil", "telugu", "odia", "punjabi", "assamese"]
             )
 
+        # Step 2: Course Inputs
+        if assessment_type == "comprehensive":
+            course_ids_input = st.text_area("Target Course IDs (comma-separated)", value=course_id, placeholder="do_123, do_456, do_789")
+        else:
+            course_ids_input = st.text_input("Target Course ID", value=course_id, placeholder="do_1234567890")
+
+        total_questions = st.number_input("Total Questions (per type)", min_value=1, max_value=20, value=5)
+
+        # Step 3: Question Config
+        col_q1, col_q2 = st.columns(2)
+        with col_q1:
+            q_types = st.multiselect(
+                "Question Types", 
+                ["MCQ", "FTB", "MTF"], 
+                default=["MCQ", "FTB", "MTF"]
+            )
+        with col_q2:
+            time_limit = st.number_input("Time Limit (Minutes)", min_value=10, max_value=180, value=60, step=10)
+
+        # Step 4: Advanced Config
+        with st.expander("Advanced Configuration (Bloom's & Topics)", expanded=False):
+            topic_names = st.text_input("Prioritize Topics (comma-separated)", placeholder="e.g. Budgeting, Risk Management, Python Basics")
+            
+            st.markdown("#### Bloom's Taxonomy Distribution (Must sum to 100%)")
+            b_col1, b_col2, b_col3, b_col4, b_col5, b_col6 = st.columns(6)
+            b_remember = b_col1.number_input("Remember %", value=20, min_value=0, max_value=100)
+            b_understand = b_col2.number_input("Understand %", value=25, min_value=0, max_value=100)
+            b_apply = b_col3.number_input("Apply %", value=25, min_value=0, max_value=100)
+            b_analyze = b_col4.number_input("Analyze %", value=20, min_value=0, max_value=100)
+            b_evaluate = b_col5.number_input("Evaluate %", value=10, min_value=0, max_value=100)
+            b_create = b_col6.number_input("Create %", value=0, min_value=0, max_value=100)
+
+            total_blooms = b_remember + b_understand + b_apply + b_analyze + b_evaluate + b_create
+            if total_blooms != 100:
+                st.warning(f"Total Bloom's Percentage: {total_blooms}%. It should be exactly 100%.")
+
         uploaded_files = st.file_uploader("Upload extra PDFs (Optional)", accept_multiple_files=True, type=['pdf'])
-        additional_instructions = st.text_area("Additional Instructions (SME notes, exclusions, priorities)", placeholder="e.g. Focus on Chapter 3, exclude technical jargon...")
+        additional_instructions = st.text_area("Additional Instructions (SME notes)", placeholder="e.g. Focus on Chapter 3, exclude technical jargon...")
         
         if st.button("Start Generation"):
+            if total_blooms != 100:
+                st.error("Cannot start: Bloom's Taxonomy distribution must equal 100%.")
+                st.stop()
+            
+            if not q_types:
+                st.error("Please select at least one Question Type.")
+                st.stop()
+
             files = []
             if uploaded_files:
                 for f in uploaded_files:
                     files.append(('files', (f.name, f.getvalue(), 'application/pdf')))
             
+            # Construct Payload
+            blooms_config = {
+                "Remember": b_remember,
+                "Understand": b_understand,
+                "Apply": b_apply,
+                "Analyze": b_analyze,
+                "Evaluate": b_evaluate,
+                "Create": b_create
+            }
+            
+            # Convert UI list to form-data compatible format (multiple keys or comma-separated)
+            # We'll use comma-separated list for simplicity in requests/payload for now as our API fallback supports it
+            q_types_str = ",".join(q_types)
+
             payload = {
-                'course_id': course_id, 
+                'course_ids': course_ids_input, 
                 'force': 'true',
                 'assessment_type': assessment_type,
                 'difficulty': difficulty,
                 'total_questions': total_questions,
+                'question_types': q_types_str,
+                'time_limit': time_limit,
+                'topic_names': topic_names,
+                'blooms_config': json.dumps(blooms_config),
                 'additional_instructions': additional_instructions,
                 'language': language
             }
@@ -79,8 +140,11 @@ if course_id:
             with st.spinner("Initiating job..."):
                 r = requests.post(f"{API_URL}/generate", data=payload, files=files)
                 if r.status_code == 200:
-                    st.success("Job started!")
-                    time.sleep(1)
+                    data = r.json()
+                    new_job_id = data.get("job_id")
+                    st.success(f"Job started! ID: {new_job_id}")
+                    # In a real app we would redirect, for now we just show success
+                    time.sleep(2)
                     st.rerun()
                 else:
                     st.error(f"Failed to start job: {r.text}")

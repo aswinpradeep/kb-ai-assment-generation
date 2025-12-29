@@ -56,47 +56,99 @@ ASSESSMENT_SCHEMA = ASSESSMENT_SCHEMA_FILE.get('full_schema', {})
 KCM_DATASET = load_json('competencies.json')
 
 async def generate_assessment(
-    course_folder: Path, 
+    course_folder: Optional[Path] = None, # Deprecated in v3.2, kept for backward compat
     assessment_type: str = "final", 
     difficulty_level: str = "Intermediate", 
     total_questions: int = 5,
     time_to_complete: Optional[str] = None,
     additional_instructions: Optional[str] = None,
-    input_language: str = "English"
+    input_language: str = "English",
+    course_ids: List[str] = None,
+    topic_names: Optional[List[str]] = None,
+    blooms_distribution: Optional[Dict[str, int]] = None,
+    question_types: List[str] = ["mcq", "ftb", "mtf"],
+    time_limit: Optional[int] = None
 ) -> Tuple[Dict, Dict, Dict]:
     """
-    Generates assessment for a course folder.
-    Returns (metadata, assessment_json, usage_metadata)
+    Generates assessment for one or multiple courses.
+    Returns (aggregated_metadata, assessment_json, usage_metadata)
     """
-    course_id = course_folder.name
-    logger.info(f"Generating assessment for {course_id} (Type: {assessment_type})")
-
-    # 1. Load Metadata
-    meta_path = course_folder / "metadata.json"
-    current_metadata = {}
-    if meta_path.exists():
-        current_metadata = json.loads(meta_path.read_text(encoding='utf-8'))
-
-    # 2. Load Transcript (and any other text files for SME notes)
-    transcript = "N/A"
-    vtt_path = course_folder / "english_subtitles.vtt"
-    if vtt_path.exists():
-        transcript = await extract_vtt_text(vtt_path)
+    # Normalize inputs
+    if not course_ids and course_folder:
+        course_ids = [course_folder.name]
     
-    # 3. Load PDFs
-    pdf_snippets = []
-    for pdf_file in course_folder.glob("*.pdf"):
-        text = await extract_pdf_text(pdf_file)
-        if text:
-            pdf_snippets.append(f"--- PDF: {pdf_file.name} ---\n{text}")
+    if not course_ids:
+        raise ValueError("No course_ids provided.")
+
+    # Create Deterministic Composite Key for Caching (Sorted IDs)
+    sorted_ids = sorted(course_ids)
+    composite_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
     
-    pdf_snippets_str = "\n\n".join(pdf_snippets) if pdf_snippets else "N/A"
+    # Base Path for Interactive Courses (should probably be passed in, but using config implied path for now)
+    base_path = Path("/app/interactive_courses_data") 
+    
+    logger.info(f"Generating assessment for {composite_id} (Type: {assessment_type})")
+
+    # 1. Aggregate Content from All Courses
+    aggregated_metadata = {"courses": []}
+    combined_transcript = []
+    combined_pdfs = []
+    
+    for cid in course_ids:
+        c_path = base_path / cid
+        if not c_path.exists():
+            logger.warning(f"Course folder {cid} not found, skipping.")
+            continue
+            
+        # Metadata
+        meta_path = c_path / "metadata.json"
+        if meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding='utf-8'))
+            aggregated_metadata["courses"].append(meta)
+            
+        # Transcript
+        vtt_path = c_path / "english_subtitles.vtt"
+        if vtt_path.exists():
+            text = await extract_vtt_text(vtt_path)
+            combined_transcript.append(f"--- SOURCE: {cid} ---\n{text}")
+            
+        # PDFs
+        for pdf_file in c_path.glob("*.pdf"):
+            text = await extract_pdf_text(pdf_file)
+            if text:
+                combined_pdfs.append(f"--- SOURCE: {cid} | PDF: {pdf_file.name} ---\n{text}")
+
+    final_transcript_str = "\n\n".join(combined_transcript) if combined_transcript else "N/A"
+    final_pdf_str = "\n\n".join(combined_pdfs) if combined_pdfs else "N/A"
+    
+    # 2. Format Bloom's Distribution
+    if not blooms_distribution:
+        # Default Logic
+        if assessment_type == "comprehensive":
+            blooms_str = "Apply: 40%, Analyze: 30%, Evaluate: 30%"
+        else:
+            blooms_str = "Remember: 20%, Understand: 25%, Apply: 25%, Analyze: 20%, Evaluate: 10%"
+    else:
+        # User defined
+        blooms_str = ", ".join([f"{k}: {v}%" for k,v in blooms_distribution.items()])
+
+    # 3. Format Topics
+    topics_str = ", ".join(topic_names) if topic_names else "None specific (Cover all modules)"
 
     # 4. Build Prompt
     prompt = build_prompt(
-        course_id, current_metadata, transcript, pdf_snippets_str,
-        assessment_type, difficulty_level, total_questions, time_to_complete,
-        additional_instructions, input_language
+        course_context=json.dumps(aggregated_metadata, indent=2),
+        transcript=final_transcript_str,
+        pdf_snippets=final_pdf_str,
+        assessment_type=assessment_type,
+        difficulty_level=difficulty_level,
+        total_questions=total_questions,
+        time_to_complete=str(time_limit) + " minutes" if time_limit else None,
+        additional_instructions=additional_instructions,
+        input_language=input_language,
+        topic_names=topics_str,
+        blooms_distribution=blooms_str,
+        question_types=question_types
     )
 
     # 5. Call LLM
@@ -104,14 +156,13 @@ async def generate_assessment(
     
     try:
         result_json = json.loads(response_text)
-        return current_metadata, result_json, usage
+        return aggregated_metadata, result_json, usage
     except json.JSONDecodeError:
         logger.error("Failed to parse LLM response as JSON")
         raise ValueError("LLM response was not valid JSON")
 
 def build_prompt(
-    course_id: str, 
-    current_metadata: Optional[Dict[str, Any]], 
+    course_context: str, 
     transcript: str, 
     pdf_snippets: str,
     assessment_type: str,
@@ -119,14 +170,16 @@ def build_prompt(
     total_questions: int,
     time_to_complete: Optional[str],
     additional_instructions: Optional[str],
-    input_language: str
+    input_language: str,
+    topic_names: str,
+    blooms_distribution: str,
+    question_types: List[str]
 ) -> str:
     prompt_template = ASSESSMENT_PROMPTS.get('system_prompt_template', '')
     
-    # Simple placeholder replacement
-    prompt = prompt_template.replace("{course_id}", course_id)
-    prompt = prompt.replace("{metadata}", json.dumps(current_metadata, indent=2))
-    prompt = prompt.replace("{content_context}", f"Transcript:\n{transcript}\n\nPDF Extracts:\n{pdf_snippets}")
+    # Placeholder Replacement
+    prompt = prompt_template.replace("{course_context}", course_context)
+    prompt = prompt.replace("{content_context}", f"TRANSCRIPTS:\n{transcript}\n\nPDF CONTENT:\n{pdf_snippets}")
     prompt = prompt.replace("{additional_instructions}", additional_instructions or "None provided")
     prompt = prompt.replace("{input_language}", input_language)
     prompt = prompt.replace("{kcm_dataset}", json.dumps(KCM_DATASET, indent=2))
@@ -134,17 +187,34 @@ def build_prompt(
     prompt = prompt.replace("{assessment_type}", assessment_type)
     prompt = prompt.replace("{difficulty_level}", difficulty_level)
     prompt = prompt.replace("{total_questions}", str(total_questions))
-    prompt = prompt.replace("{total_questions_x3}", str(total_questions * 3))
+    prompt = prompt.replace("{total_questions_x3}", str(total_questions * len(question_types)))
     prompt = prompt.replace("{time_to_complete}", time_to_complete or "Not provided (use standard pacing)")
 
-    # Bloom's distribution (Fixed or derived from assessment_type)
-    if assessment_type == "comprehensive":
-        blooms_dist = "Apply: 40%, Analyze: 30%, Evaluate: 30%"
+    # v3.3 Specifics (Question Types)
+    q_instructions = ""
+    if "mcq" in question_types:
+        q_instructions += f"\n     - {total_questions} Multiple Choice Questions (MCQs)"
     else:
-        blooms_dist = "Remember: 20%, Understand: 25%, Apply: 25%, Analyze: 20%, Evaluate: 10%"
+        q_instructions += "\n     - 0 Multiple Choice Questions (MCQs) [DO NOT GENERATE]"
+
+    if "ftb" in question_types:
+        q_instructions += f"\n     - {total_questions} Fill in the Blank Questions (FTBs)"
+    else:
+        q_instructions += "\n     - 0 Fill in the Blank Questions (FTBs) [DO NOT GENERATE]"
+
+    if "mtf" in question_types:
+        q_instructions += f"\n     - {total_questions} Match the Following Questions (MTFs)"
+    else:
+        q_instructions += "\n     - 0 Match the Following Questions (MTFs) [DO NOT GENERATE]"
+
+    prompt = prompt.replace("{question_type_instructions}", q_instructions)
+
+
+    # v3.2 Specifics
+    prompt = prompt.replace("{topic_names}", topic_names)
+    prompt = prompt.replace("{blooms_distribution}", blooms_distribution)
     
-    prompt = prompt.replace("{blooms_dist}", blooms_dist)
-    prompt = prompt.replace("{p_version}", "v3.1")
+    prompt = prompt.replace("{p_version}", "v3.3")
     prompt = prompt.replace("{a_version}", "api/v1")
 
     return prompt

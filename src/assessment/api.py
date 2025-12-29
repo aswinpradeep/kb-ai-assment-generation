@@ -64,30 +64,96 @@ async def check_status(course_id: str):
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND"})
     return status
 
+from enum import Enum
+from typing import List, Optional, Dict
+
+class AssessmentType(str, Enum):
+    PRACTICE = "practice"
+    FINAL = "final"
+    COMPREHENSIVE = "comprehensive"
+
+class Difficulty(str, Enum):
+    BEGINNER = "beginner"
+    INTERMEDIATE = "intermediate"
+    ADVANCED = "advanced"
+
+class Language(str, Enum):
+    ENGLISH = "english"
+    HINDI = "hindi"
+    TAMIL = "tamil"
+    TELUGU = "telugu"
+    KANNADA = "kannada"
+    MALAYALAM = "malayalam"
+    MARATHI = "marathi"
+    BENGALI = "bengali"
+    GUJARATI = "gujarati"
+    PUNJABI = "punjabi"
+    ODIA = "odia"
+    ASSAMESE = "assamese"
+
+class QuestionType(str, Enum):
+    MCQ = "mcq"
+    FTB = "ftb"
+    MTF = "mtf"
+
 @api_v1_router.post("/generate")
 async def generate(
     background_tasks: BackgroundTasks,
-    course_id: str = Form(...),
+    course_ids: List[str] = Form(..., description="List of Course IDs (or comma-separated string)"),
     force: bool = Form(False),
-    assessment_type: str = Form("final"),
-    difficulty: str = Form("Intermediate"),
+    assessment_type: AssessmentType = Form(...),
+    difficulty: Difficulty = Form(...),
     total_questions: int = Form(5),
+    question_types: List[str] = Form(["mcq", "ftb", "mtf"], description="List of Question Types"),
+    time_limit: Optional[int] = Form(None, description="Time limit in minutes"),
+    topic_names: Optional[str] = Form(None, description="Comma-separated topics"),
+    language: Language = Form(Language.ENGLISH),
+    blooms_config: Optional[str] = Form(None, description="JSON string of Bloom's %"),
     additional_instructions: Optional[str] = Form(None),
-    language: str = Form("English"),
     files: List[UploadFile] = File(None)
 ):
-    existing = await get_assessment_status(course_id)
+    # Parse List Inputs (Support both List[str] and comma-separated string fallback)
+    c_ids = []
+    for item in course_ids:
+        c_ids.extend([c.strip() for c in item.split(",") if c.strip()])
+    
+    q_types = []
+    for item in question_types:
+        q_types.extend([q.strip().lower() for q in item.split(",") if q.strip()])
+    
+    # Validate Question Types
+    valid_types = {t.value for t in QuestionType}
+    for qt in q_types:
+        if qt not in valid_types:
+             raise HTTPException(status_code=400, detail=f"Invalid question type: {qt}. Allowed: {valid_types}")
+
+    t_names = [t.strip() for t in topic_names.split(",")] if topic_names else None
+    
+    # Parse Bloom's Config
+    b_dist = None
+    if blooms_config:
+        try:
+            b_dist = json.loads(blooms_config)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON for blooms_config")
+
+    # Composite Key for Caching (Sorted IDs)
+    sorted_ids = sorted(c_ids)
+    composite_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
+
+    existing = await get_assessment_status(composite_id)
     if existing and existing['status'] == 'COMPLETED' and not force:
-        return {"message": "Assessment already exists", "status": "COMPLETED"}
+        return {"message": "Assessment already exists", "status": "COMPLETED", "job_id": composite_id}
     
     if existing and existing['status'] == 'IN_PROGRESS':
-        return {"message": "Assessment generation in progress", "status": "IN_PROGRESS"}
+        return {"message": "Assessment generation in progress", "status": "IN_PROGRESS", "job_id": composite_id}
 
-    await create_job(course_id)
+    await create_job(composite_id)
     
     saved_files = []
     if files:
-        temp_dir = Path(INTERACTIVE_COURSES_PATH) / course_id / "uploads"
+        # Use first course ID for temp storage to avoid complex path logic
+        temp_dir = Path(INTERACTIVE_COURSES_PATH) / sorted_ids[0] / "uploads"
         temp_dir.mkdir(parents=True, exist_ok=True)
         for file in files:
             file_path = temp_dir / file.filename
@@ -95,42 +161,68 @@ async def generate(
                 shutil.copyfileobj(file.file, buffer)
             saved_files.append(file_path)
 
-    background_tasks.add_task(process_course_task, course_id, saved_files, assessment_type, difficulty, total_questions, additional_instructions, language)
-    return {"message": "Generation started", "status": "PENDING"}
+    background_tasks.add_task(
+        process_course_task, 
+        composite_id, 
+        c_ids, 
+        saved_files, 
+        assessment_type, 
+        difficulty, 
+        total_questions, 
+        additional_instructions, 
+        language,
+        t_names,
+        b_dist,
+        q_types,
+        time_limit
+    )
+    return {"message": "Generation started", "status": "PENDING", "job_id": composite_id}
 
-async def process_course_task(course_id: str, extra_files: List[Path], assessment_type: str, difficulty: str, total_questions: int, additional_instructions: Optional[str], language: str):
+async def process_course_task(
+    job_id: str, 
+    course_ids: List[str],
+    extra_files: List[Path], 
+    assessment_type: str, 
+    difficulty: str, 
+    total_questions: int, 
+    additional_instructions: Optional[str], 
+    language: str,
+    topic_names: Optional[List[str]],
+    blooms_distribution: Optional[Dict[str, int]],
+    question_types: List[str],
+    time_limit: Optional[int]
+):
     try:
-        await update_job_status(course_id, "IN_PROGRESS")
+        await update_job_status(job_id, "IN_PROGRESS")
         
         base_path = Path(INTERACTIVE_COURSES_PATH)
-        success = await fetch_course_data(course_id, base_path)
-        if not success:
-            raise Exception("Failed to fetch course content")
-            
-        course_folder = base_path / course_id
         
-        if extra_files:
-            for f in extra_files:
-                dest = course_folder / f.name
-                if f.exists():
-                    shutil.move(str(f), str(dest))
+        # Fetch Data for ALL courses
+        for cid in course_ids:
+            success = await fetch_course_data(cid, base_path)
+            if not success:
+                logger.warning(f"Failed to fetch content for {cid}, proceeding with available data.")
 
         # 3. Generate Assessment
         metadata, assessment, usage = await generate_assessment(
-            course_folder, 
+            course_ids=course_ids,
             assessment_type=assessment_type, 
             difficulty_level=difficulty, 
             total_questions=total_questions,
             additional_instructions=additional_instructions,
-            input_language=language
+            input_language=language,
+            topic_names=topic_names,
+            blooms_distribution=blooms_distribution,
+            question_types=question_types,
+            time_limit=time_limit
         )
         
         # 4. Save Result
-        await save_assessment_result(course_id, metadata, assessment, usage)
+        await save_assessment_result(job_id, metadata, assessment, usage)
         
     except Exception as e:
-        logger.exception(f"Job failed for {course_id}")
-        await update_job_status(course_id, "FAILED", str(e))
+        logger.exception(f"Job failed for {job_id}")
+        await update_job_status(job_id, "FAILED", str(e))
 
 @api_v1_router.get("/download/{course_id}")
 async def download_csv(course_id: str):

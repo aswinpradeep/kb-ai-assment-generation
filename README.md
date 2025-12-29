@@ -60,47 +60,48 @@ docker-compose up --build
 ### 1. `POST /generate`
 Triggers the background process to fetch content and generate an assessment.
 - **Form Data**:
-  - `course_id` (str): The do_id of the course.
-  - `assessment_type` (str): `practice`, `final`, or `comprehensive`.
-  - `difficulty` (str): `Beginner`, `Intermediate`, `Advanced`.
+  - `course_ids` (str): Comma-separated list of do_ids (e.g., `do_123` or `do_123, do_456`).
+  - `assessment_type` (Enum): `practice`, `final`, `comprehensive`.
+  - `difficulty` (Enum): `beginner`, `intermediate`, `advanced`.
   - `total_questions` (int): Number of questions *per type* (total = N * 3).
-  - `language` (str): Target language (English, Hindi, etc.).
+  - `language` (Enum): `english`, `hindi`, `tamil`, `telugu`, `kannada`, `malayalam`, `marathi`, `bengali`, `gujarati`, `punjabi`, `odia`, `assamese`.
+  - `question_types` (List[str], Optional): `mcq`, `ftb`, `mtf`. Defaults to all.
+  - `time_limit` (int, Optional): Time limit in minutes (e.g., 60).
+  - `topic_names` (str, Optional): Comma-separated list of priority topics.
+  - `blooms_config` (str, Optional): JSON string, e.g., `{"Remember": 20, "Apply": 80}`.
   - `additional_instructions` (str): SME notes.
   - `files` (Optional): Extra PDFs to include in analysis.
 
-### 2. `GET /status/{course_id}`
-Returns current status and result data.
+**Response**:
+```json
+{
+  "message": "Generation started",
+  "status": "PENDING",
+  "job_id": "comprehensive_do_123_do_456" // Composite ID for multi-course jobs
+}
+```
 
-### 3. `GET /download/{course_id}`
+### 2. `GET /status/{job_id}`
+Returns current status and result data. Use the `job_id` returned from `/generate`.
+
+### 3. `GET /download/{job_id}`
 Downloads the assessment as a flattened CSV.
 
-### 4. `GET /download_json/{course_id}`
+### 4. `GET /download_json/{job_id}`
 Downloads the raw structured JSON.
 
 ---
 
 ## UI Integration Guide (Custom Frontends)
 
-If you are building a custom frontend (React, Vue, etc.), follow this sequence:
+### v3.2 Update: Strict Validation
+The API now enforces strict Enum values for `assessment_type`, `difficulty`, and `language`. Do not send free text (e.g., sending "Hard" instead of "Advanced" will fail).
 
-### 1. Triggering Generation
-Use `multipart/form-data` to handle optional file uploads.
-
-```javascript
-const formData = new FormData();
-formData.append('course_id', 'do_12345');
-formData.append('assessment_type', 'final');
-formData.append('difficulty', 'Intermediate');
-formData.append('total_questions', 5);
-formData.append('language', 'Hindi');
-formData.append('additional_instructions', 'Focus more on module 2');
-
-// Base URL: http://localhost:8000/ai-assment-generation/api/v1
-const response = await fetch('/generate', { method: 'POST', body: formData });
-```
-
-### 2. Implementation of Polling
-The `/generate` endpoint is asynchronous. Poll the `/status/{course_id}` endpoint every 3-5 seconds.
+### Multi-Course (Comprehensive) Logic
+For `Comprehensive` assessments:
+1. Pass multiple IDs in `course_ids` (e.g. `do_1,do_2`).
+2. The system generates a deterministic `job_id` (e.g., `comprehensive_do_1_do_2`).
+3. If you call `/generate` again with the same IDs, it will return the **existing** job immediately unless `force=true`.
 
 | Status | Suggested UI Action |
 | :--- | :--- |
