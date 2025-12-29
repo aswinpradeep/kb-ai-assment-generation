@@ -135,3 +135,81 @@ Contains three arrays: `Multiple Choice Question`, `FTB Question`, and `MTF Ques
 - Hallucination is strictly avoided by anchoring prompts to extracted transcripts and PDFs.
 - **KCM Mapping**: All competencies must be sourced from the authoritative KCM Dataset.
 - All output text (objectives, questions, reasoning) is generated in the selected language.
+
+## 🔄 Integration Workflow (Async Handling)
+
+Since assessment generation is a long-running process (LLM latency + file processing), the API is designed to be **Asynchronous**.
+
+### Step 1: Start Generation
+Call the `POST /generate` endpoint.
+- **Request**: Form data with course IDs and config.
+- **Response**: Immediate returns with a `job_id`.
+```json
+{
+  "message": "Generation started",
+  "status": "PENDING",
+  "job_id": "comprehensive_do_123_do_456"
+}
+```
+
+### Step 2: Poll for Status
+Use the `job_id` to poll the status every 5-10 seconds.
+**GET** `{{BASE_URL}}/api/v1/status/{job_id}`
+
+**Response Examples:**
+- **In Progress**:
+  ```json
+  { "status": "IN_PROGRESS", "job_id": "comprehensive_do_123_do_456" }
+  ```
+  _UI Action: Show a loading spinner or progress bar._
+
+- **Completed**:
+  ```json
+  { "status": "COMPLETED", "job_id": "comprehensive_do_123_do_456", "result_location": "..." }
+  ```
+  _UI Action: Stop polling. Enable "Download" or "View" buttons._
+
+- **Failed**:
+  ```json
+  { "status": "FAILED", "error": "Reason..." }
+  ```
+  _UI Action: Show error message._
+
+### Step 3: Retrieve Results
+Once status is `COMPLETED`, fetch the results.
+
+- **Get JSON (for preview)**:
+  `GET {{BASE_URL}}/api/v1/download/{job_id}?format=json`
+  
+- **Get ZIP (for download)**:
+  `GET {{BASE_URL}}/api/v1/download/{job_id}?format=zip`
+
+## 📚 API Reference (v1.0)
+
+Base URL: `http://localhost:8000/ai-assment-generation`
+
+### 1. Health Check
+- **Endpoint**: `GET /health`
+- **Description**: Verify service availability.
+- **Response**: `{"status": "healthy", ...}`
+
+### 2. Generate Assessment
+- **Endpoint**: `POST /api/v1/generate` (Multipart/Form-Data)
+- **Description**: Start an async generation job.
+- **Key Parameters**:
+  - `course_ids` (List[str]): IDs of courses to process.
+  - `assessment_type` (Enum): `practice`, `final`, `comprehensive`.
+  - `question_types` (List[str]): `mcq`, `ftb`, `mtf`.
+  - `time_limit` (int): Duration in minutes.
+  - `blooms_config` (JSON str): Optional Bloom's % map.
+- **Response**: `{"status": "PENDING", "job_id": "comprehensive_do_123..."}`
+
+### 3. Check Status
+- **Endpoint**: `GET /api/v1/status/{job_id}`
+- **Description**: Poll for job progress.
+- **Response**: Returns current status (`IN_PROGRESS`, `COMPLETED`, `FAILED`).
+
+### 4. Download Results
+- **Endpoint (CSV)**: `GET /api/v1/download/{job_id}`
+- **Endpoint (JSON)**: `GET /api/v1/download_json/{job_id}`
+- **Description**: Retrieve final assessment artifacts. Only available when status is `COMPLETED`.
