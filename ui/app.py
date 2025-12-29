@@ -15,9 +15,9 @@ API_URL = os.getenv("API_URL", "http://localhost:8000")
 if not API_URL.endswith("/ai-assment-generation/api/v1"):
     API_URL = f"{API_URL.rstrip('/')}/ai-assment-generation/api/v1"
 
-st.set_page_config(page_title="Assessment Generator v3.1", layout="wide")
+st.set_page_config(page_title="Assessment Generator v3.3", layout="wide")
 
-st.title("Course Assessment Generator (Prompt v3.1)")
+st.title("Course Assessment Generator (Prompt v3.3)")
 
 course_id = st.text_input("Enter Course ID", placeholder="do_1234567890")
 

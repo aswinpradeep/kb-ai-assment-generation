@@ -39,3 +39,14 @@ API_HEADERS = {
     'locale': 'en',
     # 'hostpath': 'portal.uat.karmayogibharat.net' # Optional based on JS
 }
+
+# Load Prompt Version
+import yaml
+PROMPTS_PATH = Path(__file__).parent / "resources" / "prompts.yaml"
+try:
+    with open(PROMPTS_PATH, "r") as f:
+        _prompts = yaml.safe_load(f)
+        PROMPT_VERSION = _prompts.get("version", "3.0")
+except Exception as e:
+    print(f"Warning: Could not load prompt version: {e}")
+    PROMPT_VERSION = "Unknown"

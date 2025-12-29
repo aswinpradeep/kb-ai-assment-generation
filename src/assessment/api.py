@@ -36,7 +36,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Course Assessment Generator API (v1.0)",
-    description="Audit-ready assessment generation using Gemini 2.5 Pro | Prompt v3.1",
+    description="Audit-ready assessment generation using Gemini 2.5 Pro",
     version="1.0.0",
     lifespan=lifespan,
     root_path="/ai-assment-generation",

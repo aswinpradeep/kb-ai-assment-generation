@@ -214,7 +214,7 @@ def build_prompt(
     prompt = prompt.replace("{topic_names}", topic_names)
     prompt = prompt.replace("{blooms_distribution}", blooms_distribution)
     
-    prompt = prompt.replace("{p_version}", "v3.3")
+    prompt = prompt.replace("{p_version}", PROMPT_VERSION)
     prompt = prompt.replace("{a_version}", "api/v1")
 
     return prompt
