@@ -165,9 +165,16 @@ Use the `job_id` to poll the status every 5-10 seconds.
 
 - **Completed**:
   ```json
-  { "status": "COMPLETED", "job_id": "comprehensive_do_123_do_456", "result_location": "..." }
+  { 
+    "status": "COMPLETED", 
+    "job_id": "comprehensive_do_123_do_456", 
+    "assessment_data": { 
+      "blueprint": {...}, 
+      "questions": {...} 
+    }
+  }
   ```
-  _UI Action: Stop polling. Enable "Download" or "View" buttons._
+  _UI Action: Stop polling. Render content from `assessment_data`._
 
 - **Failed**:
   ```json
@@ -176,13 +183,11 @@ Use the `job_id` to poll the status every 5-10 seconds.
   _UI Action: Show error message._
 
 ### Step 3: Retrieve Results
-Once status is `COMPLETED`, fetch the results.
+Once status is `COMPLETED`, the response from `GET /status/{job_id}` will contain the full `assessment_data` JSON. This can be used to **display** the questions in the frontend immediately.
 
-- **Get JSON (for preview)**:
-  `GET {{BASE_URL}}/api/v1/download/{job_id}?format=json`
-  
-- **Get ZIP (for download)**:
-  `GET {{BASE_URL}}/api/v1/download/{job_id}?format=zip`
+- **For Display**: Use the `assessment_data` field from the `/status` response.
+- **For Download (CSV)**: Call `GET {{BASE_URL}}/api/v1/download/{job_id}` to get the CSV file.
+- **For Download (JSON)**: Call `GET {{BASE_URL}}/api/v1/download_json/{job_id}` to get the JSON file.
 
 ## 📚 API Reference (v1.0)
 
@@ -207,9 +212,10 @@ Base URL: `http://localhost:8000/ai-assment-generation`
 ### 3. Check Status
 - **Endpoint**: `GET /api/v1/status/{job_id}`
 - **Description**: Poll for job progress.
-- **Response**: Returns current status (`IN_PROGRESS`, `COMPLETED`, `FAILED`).
+- **Response**: Returns status (`IN_PROGRESS`, `COMPLETED`, `FAILED`).
+- **Note**: When `COMPLETED`, the JSON response includes the full `assessment_data` object, which can be used to render the results UI directly.
 
 ### 4. Download Results
 - **Endpoint (CSV)**: `GET /api/v1/download/{job_id}`
 - **Endpoint (JSON)**: `GET /api/v1/download_json/{job_id}`
-- **Description**: Retrieve final assessment artifacts. Only available when status is `COMPLETED`.
+- **Description**: Download the assessment as a file (CSV or JSON). Only available when status is `COMPLETED`.
