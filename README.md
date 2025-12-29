@@ -1,6 +1,6 @@
-# Course Assessment Generation POC (v3.1)
+# Course Assessment Generation POC
 
-An advanced, audit-ready assessment generation system powered by **Google Gemini 2.5 Pro**, FastAPI, and Streamlit. This POC follows Senior Instructional Designer logic (Prompt v3.1) to generate blueprints and questions with detailed pedagogic reasoning.
+An advanced, audit-ready assessment generation system powered by **Google Gemini 2.5 Pro**, FastAPI, and Streamlit. This POC follows Senior Instructional Designer logic to generate blueprints and questions with detailed pedagogic reasoning.
 
 ## Features
 - **Model**: Powered by `gemini-2.5-pro`.
