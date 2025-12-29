@@ -18,6 +18,14 @@ async def fetch_course_data(course_id: str, output_base_path: Path):
     output_base_path.mkdir(parents=True, exist_ok=True)
     
     async with httpx.AsyncClient(timeout=30.0, headers=API_HEADERS) as client:
+        # 0. Check for Local Cache (Fast Path)
+        # We assume folder name == course_id mostly. 
+        # If identifier differs, we might re-download once, which is acceptable safety.
+        potential_cache = output_base_path / course_id / "metadata.json"
+        if potential_cache.exists():
+             logger.info(f"Local cache found for {course_id}. Skipping download.")
+             return True
+
         # 1. Fetch Root Course
         root_node = await search_content(client, course_id)
         if not root_node:
