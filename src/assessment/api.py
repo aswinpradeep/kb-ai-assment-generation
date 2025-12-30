@@ -4,7 +4,7 @@ import logging
 import json
 import pandas as pd
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Union
 from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException, APIRouter
 from fastapi.responses import FileResponse, JSONResponse
 from contextlib import asynccontextmanager
@@ -106,12 +106,25 @@ async def generate(
     total_questions: int = Form(5),
     question_types: List[str] = Form(["mcq", "ftb", "mtf"], description="List of Question Types"),
     time_limit: Optional[int] = Form(None, description="Time limit in minutes"),
-    topic_names: Optional[str] = Form(None, description="Comma-separated topics"),
+    topic_names: Optional[str] = Form("", description="Comma-separated topics"),
     language: Language = Form(Language.ENGLISH),
-    blooms_config: Optional[str] = Form(None, description="JSON string of Bloom's %"),
-    additional_instructions: Optional[str] = Form(None),
-    files: List[UploadFile] = File(None)
+    blooms_config: Optional[str] = Form("", description="JSON string of Bloom's %"),
+    additional_instructions: Optional[str] = Form(""),
+    files: Optional[List[Union[UploadFile, str]]] = File(None)
 ):
+    # Filter out empty strings from files list (handle Swagger/CURL empty inputs)
+    valid_files = []
+    if files:
+        for f in files:
+            if isinstance(f, UploadFile):
+                valid_files.append(f)
+    files = valid_files
+
+    # Sanitize optional string inputs (Swagger sometimes sends "string" or "")
+    if topic_names in ["string", ""]: topic_names = None
+    if blooms_config in ["string", ""]: blooms_config = None
+    if additional_instructions in ["string", ""]: additional_instructions = None
+    
     # Parse List Inputs (Support both List[str] and comma-separated string fallback)
     c_ids = []
     for item in course_ids:

@@ -63,7 +63,9 @@ if course_id:
         if assessment_type == "comprehensive":
             course_ids_input = st.text_area("Target Course IDs (comma-separated)", value=course_id, placeholder="do_123, do_456, do_789")
         else:
-            course_ids_input = st.text_input("Target Course ID", value=course_id, placeholder="do_1234567890")
+            # Single course mode: Use the top-level input directly
+            st.markdown(f"**Target Course:** `{course_id}`")
+            course_ids_input = course_id
 
         total_questions = st.number_input("Total Questions (per type)", min_value=1, max_value=20, value=5)
 
