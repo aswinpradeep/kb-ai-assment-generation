@@ -15,7 +15,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 from .config import (
     DB_DSN,
     GOOGLE_PROJECT_ID, GOOGLE_LOCATION, GENAI_MODEL_NAME, 
-    GOOGLE_APPLICATION_CREDENTIALS
+    GOOGLE_APPLICATION_CREDENTIALS, PROMPT_VERSION
 )
 
 logger = logging.getLogger(__name__)
