@@ -57,9 +57,9 @@ async def root():
 async def health():
     return {"status": "healthy", "service": "assessment-generator"}
 
-@api_v1_router.get("/status/{course_id}")
-async def check_status(course_id: str):
-    status = await get_assessment_status(course_id)
+@api_v1_router.get("/status/{job_id}")
+async def check_status(job_id: str):
+    status = await get_assessment_status(job_id)
     if not status:
         return JSONResponse(status_code=404, content={"status": "NOT_FOUND"})
     return status
@@ -224,9 +224,9 @@ async def process_course_task(
         logger.exception(f"Job failed for {job_id}")
         await update_job_status(job_id, "FAILED", str(e))
 
-@api_v1_router.get("/download/{course_id}")
-async def download_csv(course_id: str):
-    data = await get_assessment_status(course_id)
+@api_v1_router.get("/download_csv/{job_id}")
+async def download_csv(job_id: str):
+    data = await get_assessment_status(job_id)
     if not data or data['status'] != 'COMPLETED':
         raise HTTPException(status_code=404, detail="Assessment not ready or found")
     
@@ -251,23 +251,23 @@ async def download_csv(course_id: str):
             rows.append(row)
         
     df = pd.DataFrame(rows)
-    csv_path = Path(INTERACTIVE_COURSES_PATH) / f"{course_id}_assessment.csv"
+    csv_path = Path(INTERACTIVE_COURSES_PATH) / f"{job_id}_assessment.csv"
     df.to_csv(csv_path, index=False)
     
-    return FileResponse(csv_path, filename=f"{course_id}_assessment.csv")
+    return FileResponse(csv_path, filename=f"{job_id}_assessment.csv")
 
-@api_v1_router.get("/download_json/{course_id}")
-async def download_json(course_id: str):
-    data = await get_assessment_status(course_id)
+@api_v1_router.get("/download_json/{job_id}")
+async def download_json(job_id: str):
+    data = await get_assessment_status(job_id)
     if not data or data['status'] != 'COMPLETED':
         raise HTTPException(status_code=404, detail="Assessment not ready or found")
     
     assessment_json = json.loads(data['assessment_data']) if isinstance(data['assessment_data'], str) else data['assessment_data']
     
-    json_path = Path(INTERACTIVE_COURSES_PATH) / f"{course_id}_assessment.json"
+    json_path = Path(INTERACTIVE_COURSES_PATH) / f"{job_id}_assessment.json"
     with open(json_path, 'w', encoding='utf-8') as f:
         json.dump(assessment_json, f, indent=2, ensure_ascii=False)
         
-    return FileResponse(json_path, filename=f"{course_id}_assessment.json", media_type='application/json')
+    return FileResponse(json_path, filename=f"{job_id}_assessment.json", media_type='application/json')
 
 app.include_router(api_v1_router)

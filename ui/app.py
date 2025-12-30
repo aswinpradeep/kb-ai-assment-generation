@@ -22,9 +22,12 @@ st.title("Course Assessment Generator (Prompt v3.3)")
 course_id = st.text_input("Enter Course ID", placeholder="do_1234567890")
 
 if course_id:
+    # Use active job ID from session if available (for polling), otherwise input ID (for initial check)
+    current_job_id = st.session_state.get('active_job_id', course_id)
+    
     # Check Status
     try:
-        resp = requests.get(f"{API_URL}/status/{course_id}")
+        resp = requests.get(f"{API_URL}/status/{current_job_id}")
         
         if resp.status_code == 404:
             st.info("No assessment found for this course.")
@@ -119,8 +122,6 @@ if course_id:
                 "Create": b_create
             }
             
-            # Convert UI list to form-data compatible format (multiple keys or comma-separated)
-            # We'll use comma-separated list for simplicity in requests/payload for now as our API fallback supports it
             q_types_str = ",".join(q_types)
 
             payload = {
@@ -142,15 +143,15 @@ if course_id:
                 if r.status_code == 200:
                     data = r.json()
                     new_job_id = data.get("job_id")
+                    st.session_state['active_job_id'] = new_job_id
                     st.success(f"Job started! ID: {new_job_id}")
-                    # In a real app we would redirect, for now we just show success
                     time.sleep(2)
                     st.rerun()
                 else:
                     st.error(f"Failed to start job: {r.text}")
 
     elif status == "IN_PROGRESS" or status == "PENDING":
-        st.info("Generation in progress... Please wait.")
+        st.info(f"Generation in progress for Job ID: {current_job_id}... Please wait.")
         progress_bar = st.progress(0)
         for i in range(100):
             time.sleep(0.1)
@@ -226,6 +227,6 @@ if course_id:
         st.subheader("Download Results")
         col_dl1, col_dl2 = st.columns(2)
         with col_dl1:
-            st.link_button("Download JSON", f"{API_URL}/download_json/{course_id}")
+            st.link_button("Download JSON", f"{API_URL}/download_json/{current_job_id}")
         with col_dl2:
-            st.link_button("Download CSV", f"{API_URL}/download/{course_id}")
+            st.link_button("Download CSV", f"{API_URL}/download_csv/{current_job_id}")

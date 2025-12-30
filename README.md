@@ -186,7 +186,7 @@ Use the `job_id` to poll the status every 5-10 seconds.
 Once status is `COMPLETED`, the response from `GET /status/{job_id}` will contain the full `assessment_data` JSON. This can be used to **display** the questions in the frontend immediately.
 
 - **For Display**: Use the `assessment_data` field from the `/status` response.
-- **For Download (CSV)**: Call `GET {{BASE_URL}}/api/v1/download/{job_id}` to get the CSV file.
+- **For Download (CSV)**: Call `GET {{BASE_URL}}/api/v1/download_csv/{job_id}` to get the CSV file.
 - **For Download (JSON)**: Call `GET {{BASE_URL}}/api/v1/download_json/{job_id}` to get the JSON file.
 
 ## 📚 API Reference (v1.0)
@@ -216,6 +216,6 @@ Base URL: `http://localhost:8000/ai-assment-generation`
 - **Note**: When `COMPLETED`, the JSON response includes the full `assessment_data` object, which can be used to render the results UI directly.
 
 ### 4. Download Results
-- **Endpoint (CSV)**: `GET /api/v1/download/{job_id}`
+- **Endpoint (CSV)**: `GET /api/v1/download_csv/{job_id}`
 - **Endpoint (JSON)**: `GET /api/v1/download_json/{job_id}`
 - **Description**: Download the assessment as a file (CSV or JSON). Only available when status is `COMPLETED`.
