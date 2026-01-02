@@ -56,6 +56,7 @@ ASSESSMENT_SCHEMA = ASSESSMENT_SCHEMA_FILE.get('full_schema', {})
 KCM_DATASET = load_json('competencies.json')
 
 async def generate_assessment(
+    question_type_counts: Dict[str, int],
     course_folder: Optional[Path] = None, # Deprecated in v3.2, kept for backward compat
     assessment_type: str = "final", 
     difficulty_level: str = "Intermediate", 
@@ -137,6 +138,7 @@ async def generate_assessment(
 
     # 4. Build Prompt
     prompt = build_prompt(
+        question_type_counts=question_type_counts,
         course_context=json.dumps(aggregated_metadata, indent=2),
         transcript=final_transcript_str,
         pdf_snippets=final_pdf_str,
@@ -150,7 +152,7 @@ async def generate_assessment(
         blooms_distribution=blooms_str,
         question_types=question_types
     )
-
+    
     # 5. Call LLM
     response_text, usage = await call_llm(prompt)
     
@@ -162,6 +164,7 @@ async def generate_assessment(
         raise ValueError("LLM response was not valid JSON")
 
 def build_prompt(
+    question_type_counts:Dict[str, int],
     course_context: str, 
     transcript: str, 
     pdf_snippets: str,
@@ -186,24 +189,27 @@ def build_prompt(
     
     prompt = prompt.replace("{assessment_type}", assessment_type)
     prompt = prompt.replace("{difficulty_level}", difficulty_level)
-    prompt = prompt.replace("{total_questions}", str(total_questions))
-    prompt = prompt.replace("{total_questions_x3}", str(total_questions * len(question_types)))
+    prompt = prompt.replace("{total_questions_x3}", str(total_questions))
+    # prompt = prompt.replace("{total_questions_x3}", str(total_questions * len(question_types)))
     prompt = prompt.replace("{time_to_complete}", time_to_complete or "Not provided (use standard pacing)")
 
     # v3.3 Specifics (Question Types)
     q_instructions = ""
     if "mcq" in question_types:
-        q_instructions += f"\n     - {total_questions} Multiple Choice Questions (MCQs)"
+        count = question_type_counts.get('mcq', 5)
+        q_instructions += f"\n     - {count} Multiple Choice Questions (MCQs)"
     else:
         q_instructions += "\n     - 0 Multiple Choice Questions (MCQs) [DO NOT GENERATE]"
 
     if "ftb" in question_types:
-        q_instructions += f"\n     - {total_questions} Fill in the Blank Questions (FTBs)"
+        count = question_type_counts.get('ftb', 5)
+        q_instructions += f"\n     - {count} Fill in the Blank Questions (FTBs)"
     else:
         q_instructions += "\n     - 0 Fill in the Blank Questions (FTBs) [DO NOT GENERATE]"
 
     if "mtf" in question_types:
-        q_instructions += f"\n     - {total_questions} Match the Following Questions (MTFs)"
+        count = question_type_counts.get('mtf', 5)
+        q_instructions += f"\n     - {count} Match the Following Questions (MTFs)"
     else:
         q_instructions += "\n     - 0 Match the Following Questions (MTFs) [DO NOT GENERATE]"
 

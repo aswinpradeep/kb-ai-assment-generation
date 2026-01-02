@@ -104,6 +104,9 @@ async def generate(
     assessment_type: AssessmentType = Form(...),
     difficulty: Difficulty = Form(...),
     total_questions: int = Form(5),
+    question_type_counts: str = Form(
+        '{"mcq": 5, "ftb": 5, "mtf": 5}', description='Default values: {"mcq": 5, "ftb": 5, "mtf": 5}'
+    ),
     question_types: List[str] = Form(["mcq", "ftb", "mtf"], description="List of Question Types"),
     time_limit: Optional[int] = Form(None, description="Time limit in minutes"),
     topic_names: Optional[str] = Form("", description="Comma-separated topics"),
@@ -133,12 +136,20 @@ async def generate(
     q_types = []
     for item in question_types:
         q_types.extend([q.strip().lower() for q in item.split(",") if q.strip()])
-    
+
     # Validate Question Types
     valid_types = {t.value for t in QuestionType}
     for qt in q_types:
         if qt not in valid_types:
              raise HTTPException(status_code=400, detail=f"Invalid question type: {qt}. Allowed: {valid_types}")
+
+    question_type_counts: Dict[str, int] = json.loads(question_type_counts)
+    for qtype, count in question_type_counts.items():
+        if qtype not in valid_types:
+            raise HTTPException(400, f"Unknown question type: {qtype}")
+        if count <= 0:
+            raise HTTPException(400, f"Invalid question count for {qtype}")
+
 
     t_names = [t.strip() for t in topic_names.split(",")] if topic_names else None
     
@@ -182,6 +193,7 @@ async def generate(
         assessment_type, 
         difficulty, 
         total_questions, 
+        question_type_counts,
         additional_instructions, 
         language,
         t_names,
@@ -198,6 +210,7 @@ async def process_course_task(
     assessment_type: str, 
     difficulty: str, 
     total_questions: int, 
+    question_type_counts: Dict[str, int],
     additional_instructions: Optional[str], 
     language: str,
     topic_names: Optional[List[str]],
@@ -222,6 +235,7 @@ async def process_course_task(
             assessment_type=assessment_type, 
             difficulty_level=difficulty, 
             total_questions=total_questions,
+            question_type_counts=question_type_counts,
             additional_instructions=additional_instructions,
             input_language=language,
             topic_names=topic_names,

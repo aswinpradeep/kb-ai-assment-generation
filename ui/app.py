@@ -67,18 +67,45 @@ if course_id:
             st.markdown(f"**Target Course:** `{course_id}`")
             course_ids_input = course_id
 
-        total_questions = st.number_input("Total Questions (per type)", min_value=1, max_value=20, value=5)
+        # Step 3: Question Type Counts
+        st.markdown("#### Question Type Distribution")
+        col_mcq, col_ftb, col_mtf = st.columns(3)
 
-        # Step 3: Question Config
-        col_q1, col_q2 = st.columns(2)
-        with col_q1:
-            q_types = st.multiselect(
-                "Question Types", 
-                ["MCQ", "FTB", "MTF"], 
-                default=["MCQ", "FTB", "MTF"]
+        with col_mcq:
+            mcq_count = st.number_input(
+                "MCQ Questions",
+                min_value=0,
+                max_value=20,
+                value=5,
+                step=1,
+                help="Number of Multiple Choice Questions"
             )
-        with col_q2:
-            time_limit = st.number_input("Time Limit (Minutes)", min_value=10, max_value=180, value=60, step=10)
+
+        with col_ftb:
+            ftb_count = st.number_input(
+                "FTB Questions",
+                min_value=0,
+                max_value=20,
+                value=5,
+                step=1,
+                help="Number of Fill in the Blank Questions"
+            )
+
+        with col_mtf:
+            mtf_count = st.number_input(
+                "MTF Questions",
+                min_value=0,
+                max_value=20,
+                value=5,
+                step=1,
+                help="Number of Match the Following Questions"
+            )
+
+        total_questions = mcq_count + ftb_count + mtf_count
+        st.info(f"Total Questions: {total_questions}")
+
+        # Step 4: Additional Config
+        time_limit = st.number_input("Time Limit (Minutes)", min_value=10, max_value=180, value=60, step=10)
 
         # Step 4: Advanced Config
         with st.expander("Advanced Configuration (Bloom's & Topics)", expanded=False):
@@ -104,16 +131,16 @@ if course_id:
             if total_blooms != 100:
                 st.error("Cannot start: Bloom's Taxonomy distribution must equal 100%.")
                 st.stop()
-            
-            if not q_types:
-                st.error("Please select at least one Question Type.")
+
+            if total_questions == 0:
+                st.error("Please specify at least one question (MCQ, FTB, or MTF).")
                 st.stop()
 
             files = []
             if uploaded_files:
                 for f in uploaded_files:
                     files.append(('files', (f.name, f.getvalue(), 'application/pdf')))
-            
+
             # Construct Payload
             blooms_config = {
                 "Remember": b_remember,
@@ -123,15 +150,31 @@ if course_id:
                 "Evaluate": b_evaluate,
                 "Create": b_create
             }
-            
-            q_types_str = ",".join(q_types)
+
+            # Build question_type_counts JSON
+            question_type_counts_dict = {}
+            q_types_list = []
+
+            if mcq_count > 0:
+                question_type_counts_dict["mcq"] = mcq_count
+                q_types_list.append("mcq")
+            if ftb_count > 0:
+                question_type_counts_dict["ftb"] = ftb_count
+                q_types_list.append("ftb")
+            if mtf_count > 0:
+                question_type_counts_dict["mtf"] = mtf_count
+                q_types_list.append("mtf")
+
+            q_types_str = ",".join(q_types_list)
+            question_type_counts_json = json.dumps(question_type_counts_dict)
 
             payload = {
-                'course_ids': course_ids_input, 
+                'course_ids': course_ids_input,
                 'force': 'true',
                 'assessment_type': assessment_type,
                 'difficulty': difficulty,
                 'total_questions': total_questions,
+                'question_type_counts': question_type_counts_json,
                 'question_types': q_types_str,
                 'time_limit': time_limit,
                 'topic_names': topic_names,
