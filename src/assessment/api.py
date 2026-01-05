@@ -7,12 +7,14 @@ from pathlib import Path
 from typing import List, Optional, Union
 from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Form, HTTPException, APIRouter
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.openapi.utils import get_openapi
 from contextlib import asynccontextmanager
 
 from .config import INTERACTIVE_COURSES_PATH
 from .db import init_db, create_job, update_job_status, get_assessment_status, save_assessment_result
 from .fetcher import fetch_course_data
 from .generator import generate_assessment
+from .exporters import generate_pdf, generate_docx
 
 # Configure Logging
 logging.basicConfig(
@@ -115,12 +117,14 @@ async def generate(
     additional_instructions: Optional[str] = Form(""),
     files: Optional[List[Union[UploadFile, str]]] = File(None)
 ):
-    # Filter out empty strings from files list (handle Swagger/CURL empty inputs)
+    # Robust File Handling (Workaround for Swagger UI defaults)
     valid_files = []
     if files:
         for f in files:
             if isinstance(f, UploadFile):
                 valid_files.append(f)
+            # Ignore strings (like 'string' or empty string from Swagger/CURL)
+    
     files = valid_files
 
     # Sanitize optional string inputs (Swagger sometimes sends "string" or "")
@@ -237,11 +241,11 @@ async def process_course_task(
             total_questions=total_questions,
             question_type_counts=question_type_counts,
             additional_instructions=additional_instructions,
-            input_language=language,
             topic_names=topic_names,
             blooms_distribution=blooms_distribution,
             question_types=question_types,
-            time_limit=time_limit
+            time_limit=time_limit,
+            extra_files=extra_files
         )
         
         # 4. Save Result
@@ -297,4 +301,77 @@ async def download_json(job_id: str):
         
     return FileResponse(json_path, filename=f"{job_id}_assessment.json", media_type='application/json')
 
+@api_v1_router.get("/download_pdf/{job_id}")
+async def download_pdf(job_id: str):
+    data = await get_assessment_status(job_id)
+    if not data or data['status'] != 'COMPLETED':
+        raise HTTPException(status_code=404, detail="Assessment not ready or found")
+    
+    assessment_json = json.loads(data['assessment_data']) if isinstance(data['assessment_data'], str) else data['assessment_data']
+    pdf_path = Path(INTERACTIVE_COURSES_PATH) / f"{job_id}_assessment.pdf"
+    
+    if not pdf_path.exists():
+        generate_pdf(assessment_json, pdf_path)
+        
+    return FileResponse(pdf_path, filename=f"{job_id}_assessment.pdf", media_type='application/pdf')
+
+@api_v1_router.get("/download_docx/{job_id}")
+async def download_docx(job_id: str):
+    data = await get_assessment_status(job_id)
+    if not data or data['status'] != 'COMPLETED':
+        raise HTTPException(status_code=404, detail="Assessment not ready or found")
+    
+    assessment_json = json.loads(data['assessment_data']) if isinstance(data['assessment_data'], str) else data['assessment_data']
+    docx_path = Path(INTERACTIVE_COURSES_PATH) / f"{job_id}_assessment.docx"
+    
+    if not docx_path.exists():
+        generate_docx(assessment_json, docx_path)
+        
+    return FileResponse(docx_path, filename=f"{job_id}_assessment.docx", media_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+
 app.include_router(api_v1_router)
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # WORKAROUND: Force 'files' to be binary array in Docs
+    # ----------------------------------------------------
+    try:
+        paths = openapi_schema.get("paths", {})
+        for path, methods in paths.items():
+            if path.endswith("/generate"):
+                post = methods.get("post", {})
+                content = post.get("requestBody", {},).get("content", {})
+                multipart = content.get("multipart/form-data", {})
+                schema = multipart.get("schema", {})
+                
+                # Check if schema is a reference
+                if "$ref" in schema:
+                    ref_name = schema["$ref"].split("/")[-1]
+                    schema = openapi_schema.get("components", {}).get("schemas", {}).get(ref_name, {})
+                
+                properties = schema.get("properties", {})
+                
+                # Force File Picker Override
+                properties["files"] = {
+                    "type": "array",
+                    "items": {"type": "string", "format": "binary"},
+                    "title": "Files",
+                    "description": "Upload Files"
+                }
+                logger.info(f"Forced 'files' schema override for path: {path}")
+    except Exception as e:
+        logger.warning(f"Failed to patch OpenAPI schema: {e}")
+
+    app.openapi_schema = openapi_schema
+    return openapi_schema
+
+app.openapi = custom_openapi

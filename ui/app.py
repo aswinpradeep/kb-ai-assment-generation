@@ -124,7 +124,7 @@ if course_id:
             if total_blooms != 100:
                 st.warning(f"Total Bloom's Percentage: {total_blooms}%. It should be exactly 100%.")
 
-        uploaded_files = st.file_uploader("Upload extra PDFs (Optional)", accept_multiple_files=True, type=['pdf'])
+        uploaded_files = st.file_uploader("Upload extra content (PDF/VTT)", accept_multiple_files=True, type=['pdf', 'vtt'])
         additional_instructions = st.text_area("Additional Instructions (SME notes)", placeholder="e.g. Focus on Chapter 3, exclude technical jargon...")
         
         if st.button("Start Generation"):
@@ -139,7 +139,8 @@ if course_id:
             files = []
             if uploaded_files:
                 for f in uploaded_files:
-                    files.append(('files', (f.name, f.getvalue(), 'application/pdf')))
+                    mime_type = "application/pdf" if f.name.endswith(".pdf") else "text/vtt"
+                    files.append(('files', (f.name, f.getvalue(), mime_type)))
 
             # Construct Payload
             blooms_config = {
@@ -270,8 +271,12 @@ if course_id:
         
         # Download
         st.subheader("Download Results")
-        col_dl1, col_dl2 = st.columns(2)
+        col_dl1, col_dl2, col_dl3, col_dl4 = st.columns(4)
         with col_dl1:
             st.link_button("Download JSON", f"{API_URL}/download_json/{current_job_id}")
         with col_dl2:
             st.link_button("Download CSV", f"{API_URL}/download_csv/{current_job_id}")
+        with col_dl3:
+            st.link_button("Download PDF", f"{API_URL}/download_pdf/{current_job_id}")
+        with col_dl4:
+            st.link_button("Download DOCX", f"{API_URL}/download_docx/{current_job_id}")

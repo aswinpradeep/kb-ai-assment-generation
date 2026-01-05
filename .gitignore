@@ -44,3 +44,6 @@ Thumbs.db
 # Credentials
 credentials.json
 *.json.key
+
+#HTML
+pdf_video_meta.html

@@ -66,6 +66,7 @@ Triggers the background process to fetch content and generate an assessment.
   - `total_questions` (int): Number of questions *per type* (total = N * 3).
   - `language` (Enum): `english`, `hindi`, `tamil`, `telugu`, `kannada`, `malayalam`, `marathi`, `bengali`, `gujarati`, `punjabi`, `odia`, `assamese`.
   - `question_types` (List[str], Optional): `mcq`, `ftb`, `mtf`. Defaults to all.
+  - `question_type_counts` (str, Optional): JSON string defining count per type. Default: `{"mcq": 5, "ftb": 5, "mtf": 5}`.
   - `time_limit` (int, Optional): Time limit in minutes (e.g., 60).
   - `topic_names` (str, Optional): Comma-separated list of priority topics.
   - `blooms_config` (str, Optional): JSON string, e.g., `{"Remember": 20, "Apply": 80}`.
@@ -218,4 +219,6 @@ Base URL: `http://localhost:8000/ai-assment-generation`
 ### 4. Download Results
 - **Endpoint (CSV)**: `GET /api/v1/download_csv/{job_id}`
 - **Endpoint (JSON)**: `GET /api/v1/download_json/{job_id}`
-- **Description**: Download the assessment as a file (CSV or JSON). Only available when status is `COMPLETED`.
+- **Endpoint (PDF)**: `GET /api/v1/download_pdf/{job_id}`
+- **Endpoint (DOCX)**: `GET /api/v1/download_docx/{job_id}`
+- **Description**: Download the assessment as a file. Only available when status is `COMPLETED`.

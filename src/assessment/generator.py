@@ -1,5 +1,6 @@
 import os
 import json
+import hashlib
 import asyncio
 import logging
 import time
@@ -68,7 +69,8 @@ async def generate_assessment(
     topic_names: Optional[List[str]] = None,
     blooms_distribution: Optional[Dict[str, int]] = None,
     question_types: List[str] = ["mcq", "ftb", "mtf"],
-    time_limit: Optional[int] = None
+    time_limit: Optional[int] = None,
+    extra_files: Optional[List[Path]] = None
 ) -> Tuple[Dict, Dict, Dict]:
     """
     Generates assessment for one or multiple courses.
@@ -95,6 +97,9 @@ async def generate_assessment(
     combined_transcript = []
     combined_pdfs = []
     
+    # Deduplication Set (to prevent double-handling of leaf vs root downloads)
+    seen_content_hashes = set()
+
     for cid in course_ids:
         c_path = base_path / cid
         if not c_path.exists():
@@ -107,17 +112,52 @@ async def generate_assessment(
             meta = json.loads(meta_path.read_text(encoding='utf-8'))
             aggregated_metadata["courses"].append(meta)
             
-        # Transcript
-        vtt_path = c_path / "english_subtitles.vtt"
-        if vtt_path.exists():
-            text = await extract_vtt_text(vtt_path)
-            combined_transcript.append(f"--- SOURCE: {cid} ---\n{text}")
+        # Transcript (Recursive - find all english_subtitles.vtt in subfolders)
+        for vtt_path in c_path.rglob("english_subtitles.vtt"):
+             try:
+                 text = await extract_vtt_text(vtt_path)
+                 if not text: continue
+                 
+                 # Deduplication Check
+                 text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+                 if text_hash in seen_content_hashes:
+                     logger.info(f"Skipping duplicate VTT content: {vtt_path.name}")
+                     continue
+                 seen_content_hashes.add(text_hash)
+                 
+                 rel_path = vtt_path.relative_to(c_path)
+                 combined_transcript.append(f"--- SOURCE: {cid} / {rel_path} ---\n{text}")
+             except Exception as e:
+                 logger.warning(f"Failed to read VTT {vtt_path}: {e}")
             
-        # PDFs
-        for pdf_file in c_path.glob("*.pdf"):
-            text = await extract_pdf_text(pdf_file)
-            if text:
-                combined_pdfs.append(f"--- SOURCE: {cid} | PDF: {pdf_file.name} ---\n{text}")
+        # PDFs (Recursive - find all PDFs in subfolders)
+        for pdf_file in c_path.rglob("*.pdf"):
+             # Avoid reading the same file if multiple symlinks or structure exists
+             try:
+                text = await extract_pdf_text(pdf_file)
+                if not text: continue
+
+                # Deduplication Check
+                text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+                if text_hash in seen_content_hashes:
+                    logger.info(f"Skipping duplicate PDF content: {pdf_file.name}")
+                    continue
+                seen_content_hashes.add(text_hash)
+
+                rel_path = pdf_file.relative_to(c_path)
+                combined_pdfs.append(f"--- SOURCE: {cid} / {rel_path} ---\n{text}")
+             except Exception as e:
+                 logger.warning(f"Failed to read PDF {pdf_file}: {e}")
+
+    # Process Extra Uploaded Files (from API)
+    if extra_files:
+        for fpath in extra_files:
+            if fpath.suffix.lower() == '.pdf':
+                text = await extract_pdf_text(fpath)
+                combined_pdfs.append(f"--- UPLOADED FILE: {fpath.name} ---\n{text}")
+            elif fpath.suffix.lower() == '.vtt':
+                text = await extract_vtt_text(fpath)
+                combined_transcript.append(f"--- UPLOADED FILE: {fpath.name} ---\n{text}")
 
     final_transcript_str = "\n\n".join(combined_transcript) if combined_transcript else "N/A"
     final_pdf_str = "\n\n".join(combined_pdfs) if combined_pdfs else "N/A"
