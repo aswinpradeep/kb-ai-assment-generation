@@ -168,9 +168,30 @@ async def generate(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid JSON for blooms_config")
 
-    # Composite Key for Caching (Sorted IDs)
+    import hashlib
+    # Generate Parameter Hash for Cache Invalidation
+    param_list = [
+        str(assessment_type),
+        str(difficulty),
+        str(total_questions),
+        str(question_type_counts),
+        str(sorted(question_types)), # Sort for consistency
+        str(time_limit),
+        str(topic_names),
+        str(language),
+        str(blooms_config),
+        str(additional_instructions)
+    ]
+    if files:
+         param_list.extend([f.filename for f in valid_files])
+
+    param_str = "_".join(param_list)
+    param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
+
+    # Composite Key for Caching (Sorted course IDs + Hash)
     sorted_ids = sorted(c_ids)
-    composite_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
+    base_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
+    composite_id = f"{base_id}_{param_hash}"
 
     existing = await get_assessment_status(composite_id)
     if existing and existing['status'] == 'COMPLETED' and not force:
