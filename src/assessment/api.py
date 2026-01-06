@@ -241,6 +241,7 @@ async def process_course_task(
             total_questions=total_questions,
             question_type_counts=question_type_counts,
             additional_instructions=additional_instructions,
+            input_language=language,
             topic_names=topic_names,
             blooms_distribution=blooms_distribution,
             question_types=question_types,
