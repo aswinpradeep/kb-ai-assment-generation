@@ -67,6 +67,20 @@ def generate_pdf(assessment_data: dict, output_path: Path):
                 for p in q.get("pairs", []):
                     story.append(Paragraph(f"- {p.get('left')} -> {p.get('right')}", normal_style))
             
+            elif q_type == "Multi-Choice Question":
+                for opt in q.get("options", []):
+                    story.append(Paragraph(f"[ ] {opt.get('text', '')}", normal_style))
+                story.append(Spacer(1, 6))
+                corr = q.get('correct_option_index')
+                corr_str = ", ".join(map(str, corr)) if isinstance(corr, list) else str(corr)
+                story.append(Paragraph(f"<b>Correct Options:</b> {corr_str}", normal_style))
+
+            elif q_type == "True/False Question":
+                 story.append(Paragraph(f"- True", normal_style))
+                 story.append(Paragraph(f"- False", normal_style))
+                 story.append(Spacer(1, 6))
+                 story.append(Paragraph(f"<b>Correct Answer:</b> {q.get('correct_answer')}", normal_style))
+            
             else:
                 story.append(Paragraph(f"<b>Answer:</b> {q.get('correct_answer')}", normal_style))
             
@@ -140,6 +154,20 @@ def generate_docx(assessment_data: dict, output_path: Path):
             elif q_type == "MTF Question":
                 for p_item in q.get("pairs", []):
                     doc.add_paragraph(f"- {p_item.get('left')} -> {p_item.get('right')}", style='List Bullet')
+
+            elif q_type == "Multi-Choice Question":
+                for opt in q.get("options", []):
+                     doc.add_paragraph(f"[ ] {opt.get('text', '')}", style='List Bullet')
+                p = doc.add_paragraph()
+                corr = q.get('correct_option_index')
+                corr_str = ", ".join(map(str, corr)) if isinstance(corr, list) else str(corr)
+                p.add_run(f"Correct Options: {corr_str}").bold = True
+
+            elif q_type == "True/False Question":
+                 doc.add_paragraph(f"- True", style='List Bullet')
+                 doc.add_paragraph(f"- False", style='List Bullet')
+                 p = doc.add_paragraph()
+                 p.add_run(f"Correct Answer: {q.get('correct_answer')}").bold = True
             
             else:
                  p = doc.add_paragraph()

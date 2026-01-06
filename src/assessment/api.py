@@ -97,6 +97,8 @@ class QuestionType(str, Enum):
     MCQ = "mcq"
     FTB = "ftb"
     MTF = "mtf"
+    MULTICHOICE = "multichoice"
+    TRUE_FALSE = "truefalse"
 
 @api_v1_router.post("/generate")
 async def generate(
@@ -107,9 +109,10 @@ async def generate(
     difficulty: Difficulty = Form(...),
     total_questions: int = Form(5),
     question_type_counts: str = Form(
-        '{"mcq": 5, "ftb": 5, "mtf": 5}', description='Default values: {"mcq": 5, "ftb": 5, "mtf": 5}'
+        '{"mcq": 5, "ftb": 5, "mtf": 5, "multichoice": 5, "truefalse": 5}', 
+        description='Default values: {"mcq": 5, "ftb": 5, "mtf": 5, "multichoice": 5, "truefalse": 5}'
     ),
-    question_types: List[str] = Form(["mcq", "ftb", "mtf"], description="List of Question Types"),
+    question_types: List[str] = Form(["mcq", "ftb", "mtf", "multichoice", "truefalse"], description="List of Question Types"),
     time_limit: Optional[int] = Form(None, description="Time limit in minutes"),
     topic_names: Optional[str] = Form("", description="Comma-separated topics"),
     language: Language = Form(Language.ENGLISH),
@@ -275,7 +278,11 @@ async def download_csv(job_id: str):
                 "Type": q_type,
                 "Text": q.get("question_text", "N/A"),
                 "Options/Pairs": json.dumps(q.get("options") or q.get("pairs") or "", ensure_ascii=False),
-                "Correct Answer": q.get("correct_option_index") if q.get("correct_option_index") is not None else q.get("correct_answer"),
+                "Correct Answer": (
+                    ",".join(map(str, q.get("correct_option_index"))) if isinstance(q.get("correct_option_index"), list)
+                    else q.get("correct_option_index") if q.get("correct_option_index") is not None 
+                    else q.get("correct_answer")
+                ),
                 "Blooms Level": q.get("blooms_level"),
                 "Difficulty": q.get("difficulty_level"),
                 "Relevance %": q.get("relevance_percentage")

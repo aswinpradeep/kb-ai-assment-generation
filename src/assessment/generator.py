@@ -253,6 +253,18 @@ def build_prompt(
     else:
         q_instructions += "\n     - 0 Match the Following Questions (MTFs) [DO NOT GENERATE]"
 
+    if "multichoice" in question_types:
+        count = question_type_counts.get('multichoice', 5)
+        q_instructions += f"\n     - {count} Multi-Choice Questions"
+    else:
+        q_instructions += "\n     - 0 Multi-Choice Questions [DO NOT GENERATE]"
+        
+    if "truefalse" in question_types:
+        count = question_type_counts.get('truefalse', 5)
+        q_instructions += f"\n     - {count} True/False Questions"
+    else:
+        q_instructions += "\n     - 0 True/False Questions [DO NOT GENERATE]"
+
     prompt = prompt.replace("{question_type_instructions}", q_instructions)
 
 

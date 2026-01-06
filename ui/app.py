@@ -69,8 +69,8 @@ if course_id:
 
         # Step 3: Question Type Counts
         st.markdown("#### Question Type Distribution")
-        col_mcq, col_ftb, col_mtf = st.columns(3)
-
+        col_mcq, col_ftb, col_mtf, col_multi, col_tf = st.columns(5)
+        
         with col_mcq:
             mcq_count = st.number_input(
                 "MCQ Questions",
@@ -78,9 +78,9 @@ if course_id:
                 max_value=20,
                 value=5,
                 step=1,
-                help="Number of Multiple Choice Questions"
+                help="Multiple Choice (Single Correct)"
             )
-
+            
         with col_ftb:
             ftb_count = st.number_input(
                 "FTB Questions",
@@ -88,7 +88,7 @@ if course_id:
                 max_value=20,
                 value=5,
                 step=1,
-                help="Number of Fill in the Blank Questions"
+                help="Fill in the Blank"
             )
 
         with col_mtf:
@@ -98,10 +98,30 @@ if course_id:
                 max_value=20,
                 value=5,
                 step=1,
-                help="Number of Match the Following Questions"
+                help="Match the Following"
+            )
+            
+        with col_multi:
+            multi_count = st.number_input(
+                "Multi-Choice",
+                min_value=0,
+                max_value=20,
+                value=0,
+                step=1,
+                help="Multiple Correct Options"
+            )
+            
+        with col_tf:
+            tf_count = st.number_input(
+                "True/False",
+                min_value=0,
+                max_value=20,
+                value=0,
+                step=1,
+                help="True or False Questions"
             )
 
-        total_questions = mcq_count + ftb_count + mtf_count
+        total_questions = mcq_count + ftb_count + mtf_count + multi_count + tf_count
         st.info(f"Total Questions: {total_questions}")
 
         # Step 4: Additional Config
@@ -165,6 +185,12 @@ if course_id:
             if mtf_count > 0:
                 question_type_counts_dict["mtf"] = mtf_count
                 q_types_list.append("mtf")
+            if multi_count > 0:
+                question_type_counts_dict["multichoice"] = multi_count
+                q_types_list.append("multichoice")
+            if tf_count > 0:
+                question_type_counts_dict["truefalse"] = tf_count
+                q_types_list.append("truefalse")
 
             q_types_str = ",".join(q_types_list)
             question_type_counts_json = json.dumps(question_type_counts_dict)
@@ -246,10 +272,15 @@ if course_id:
                             for opt in q.get("options", []):
                                 st.write(f"- {opt['text']}")
                             st.info(f"Answer: Option {q.get('correct_option_index')}")
+                        elif q_type == "Multi-Choice Question":
+                             for opt in q.get("options", []):
+                                st.write(f"- {opt['text']}")
+                             st.info(f"Correct Options: {q.get('correct_option_index')}")
                         elif q_type == "MTF Question":
                             for p in q.get("pairs", []):
                                 st.write(f"- {p['left']} → {p['right']}")
                         else:
+                            # FTB and True/False
                             st.info(f"Answer: {q.get('correct_answer')}")
                         
                         # Explainability Section
