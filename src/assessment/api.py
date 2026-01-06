@@ -274,7 +274,7 @@ async def download_csv(job_id: str):
                 "Question ID": q.get("question_id"),
                 "Type": q_type,
                 "Text": q.get("question_text", "N/A"),
-                "Options/Pairs": json.dumps(q.get("options") or q.get("pairs") or ""),
+                "Options/Pairs": json.dumps(q.get("options") or q.get("pairs") or "", ensure_ascii=False),
                 "Correct Answer": q.get("correct_option_index") if q.get("correct_option_index") is not None else q.get("correct_answer"),
                 "Blooms Level": q.get("blooms_level"),
                 "Difficulty": q.get("difficulty_level"),
