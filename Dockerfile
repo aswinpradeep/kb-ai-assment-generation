@@ -6,6 +6,13 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y \
     build-essential \
     libpq-dev \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libjpeg62-turbo \
+    libopenjp2-7 \
+    libffi-dev \
+    libgobject-2.0-0 \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy packaging files + source BEFORE pip install
