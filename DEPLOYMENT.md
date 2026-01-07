@@ -5,6 +5,7 @@ This guide provides the minimal steps to deploy the Assessment Generation POC us
 ## 1. Prerequisites
 - **Docker** and **Docker Compose** installed on the server.
 - **Port 8000** (API) and **Port 8501** (UI) must be open in the firewall.
+- **System Libraries** (for PDF Generation): `libpango-1.0-0`, `libpangoft2-1.0-0`, `libjpeg62-turbo`, `libopenjp2-7` (Debian/Ubuntu).
 
 ## 2. Configuration
 Create a `.env` file and a `credentials.json` file in the project root.

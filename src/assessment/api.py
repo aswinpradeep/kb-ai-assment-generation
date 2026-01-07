@@ -349,8 +349,9 @@ async def download_pdf(job_id: str):
     assessment_json = json.loads(data['assessment_data']) if isinstance(data['assessment_data'], str) else data['assessment_data']
     pdf_path = Path(INTERACTIVE_COURSES_PATH) / f"{job_id}_assessment.pdf"
     
-    if not pdf_path.exists():
-        generate_pdf(assessment_json, pdf_path)
+    # Remove caching check to ensure font fixes are applied
+    # if not pdf_path.exists():
+    generate_pdf(assessment_json, pdf_path)
         
     return FileResponse(pdf_path, filename=f"{job_id}_assessment.pdf", media_type='application/pdf')
 

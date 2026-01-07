@@ -1,115 +1,175 @@
 import json
+import logging
+import os
 from pathlib import Path
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
 from docx import Document
 from docx.shared import Pt, Inches
 
-def generate_pdf(assessment_data: dict, output_path: Path):
-    """Generates a PDF report from the assessment JSON data."""
-    doc = SimpleDocTemplate(str(output_path), pagesize=A4)
-    styles = getSampleStyleSheet()
-    story = []
+# WeasyPrint Import
+from weasyprint import HTML, CSS
+from weasyprint.text.fonts import FontConfiguration
 
-    # Custom Styles
-    title_style = styles["Title"]
-    h1_style = styles["Heading1"]
-    h2_style = styles["Heading2"]
-    normal_style = styles["Normal"]
+logger = logging.getLogger(__name__)
+
+# Suppress noisy logs from pdf generation libraries
+# WeasyPrint and FontTools can be very verbose, especially during font subsetting
+# The user specifically requested only error logs.
+for logger_name in ["weasyprint", "fontTools", "fontTools.subset", "fontTools.ttLib", "pydyf"]:
+    logging.getLogger(logger_name).setLevel(logging.ERROR)
+
+RESOURCE_DIR = Path(__file__).parent / "resources" / "fonts"
+
+def get_css_font_faces() -> str:
+    """Generates CSS @font-face rules for all available Noto fonts."""
+    font_map = {
+        "NotoSansDevanagari-Regular.ttf": "NotoSansDevanagari",
+        "NotoSansTamil-Regular.ttf": "NotoSansTamil",
+        "NotoSansTelugu-Regular.ttf": "NotoSansTelugu",
+        "NotoSansKannada-Regular.ttf": "NotoSansKannada",
+        "NotoSansMalayalam-Regular.ttf": "NotoSansMalayalam",
+        "NotoSansBengali-Regular.ttf": "NotoSansBengali",
+        "NotoSansGujarati-Regular.ttf": "NotoSansGujarati",
+        "NotoSansGurmukhi-Regular.ttf": "NotoSansGurmukhi"
+    }
     
-    # 1. Title Page
-    story.append(Paragraph("Course Assessment Report", title_style))
-    story.append(Spacer(1, 12))
-    
+    css = []
+    for filename, font_family in font_map.items():
+        font_path = RESOURCE_DIR / filename
+        if font_path.exists():
+            # WeasyPrint needs file:// URI for local files or absolute paths
+            css.append(f"""
+            @font-face {{
+                font-family: '{font_family}';
+                src: url('file://{font_path.absolute()}');
+            }}""")
+            
+    return "\n".join(css)
+
+def generate_html_content(assessment_data: dict) -> str:
+    """Constructs the HTML report string."""
     blueprint = assessment_data.get("blueprint", {})
-    story.append(Paragraph(f"<b>Assessment Scope:</b> {blueprint.get('assessment_scope_summary', 'N/A')}", normal_style))
-    story.append(Spacer(1, 12))
-    
-    # Audit Info
-    story.append(Paragraph("<b>Audit Information</b>", h2_style))
-    audit_data = [
-        ["Prompt Version", blueprint.get("prompt_version", "N/A")],
-        ["API Version", blueprint.get("api_version", "N/A")]
-    ]
-    t = Table(audit_data, colWidths=[150, 300])
-    t.setStyle(TableStyle([
-        ('BACKGROUND', (0,0), (0,-1), colors.lightgrey),
-        ('GRID', (0,0), (-1,-1), 1, colors.black),
-        ('PADDING', (0,0), (-1,-1), 6),
-    ]))
-    story.append(t)
-    story.append(Spacer(1, 24))
-
-    # 2. Questions Section
-    story.append(Paragraph("Questions & Reasoning", h1_style))
-    
     questions_obj = assessment_data.get("questions", {})
     
-    for q_type, q_list in questions_obj.items():
-        story.append(Paragraph(f"{q_type} ({len(q_list)})", h2_style))
-        story.append(Spacer(1, 12))
-        
-        for i, q in enumerate(q_list, 1):
-            q_text = q.get("question_text", "N/A")
-            story.append(Paragraph(f"<b>Q{i}: {q_text}</b>", normal_style))
-            story.append(Spacer(1, 6))
-            
-            # Options / Details
-            if q_type == "Multiple Choice Question":
-                for opt in q.get("options", []):
-                    story.append(Paragraph(f"- {opt.get('text', '')}", normal_style))
-                story.append(Spacer(1, 6))
-                story.append(Paragraph(f"<b>Correct Answer:</b> Option {q.get('correct_option_index')}", normal_style))
-            
-            elif q_type == "MTF Question":
-                for p in q.get("pairs", []):
-                    story.append(Paragraph(f"- {p.get('left')} -> {p.get('right')}", normal_style))
-            
-            elif q_type == "Multi-Choice Question":
-                for opt in q.get("options", []):
-                    story.append(Paragraph(f"[ ] {opt.get('text', '')}", normal_style))
-                story.append(Spacer(1, 6))
-                corr = q.get('correct_option_index')
-                corr_str = ", ".join(map(str, corr)) if isinstance(corr, list) else str(corr)
-                story.append(Paragraph(f"<b>Correct Options:</b> {corr_str}", normal_style))
+    # Audit Data
+    prompt_ver = blueprint.get("prompt_version", "N/A")
+    api_ver = blueprint.get("api_version", "N/A")
+    scope = blueprint.get('assessment_scope_summary', 'N/A')
+    
+    # CSS
+    font_faces = get_css_font_faces()
+    # Pango Stack: Put specific fonts first, then sans-serif fallback
+    font_stack = "'NotoSansMalayalam', 'NotoSansDevanagari', 'NotoSansTamil', 'NotoSansTelugu', 'NotoSansKannada', 'NotoSansBengali', 'NotoSansGujarati', 'NotoSansGurmukhi', sans-serif"
 
-            elif q_type == "True/False Question":
-                 story.append(Paragraph(f"- True", normal_style))
-                 story.append(Paragraph(f"- False", normal_style))
-                 story.append(Spacer(1, 6))
-                 story.append(Paragraph(f"<b>Correct Answer:</b> {q.get('correct_answer')}", normal_style))
-            
-            else:
-                story.append(Paragraph(f"<b>Answer:</b> {q.get('correct_answer')}", normal_style))
-            
-            story.append(Spacer(1, 6))
-            
-            # Pedagogical Reasoning Box
-            reasoning = q.get("reasoning", {})
-            kcm = reasoning.get("competency_alignment", {}).get("kcm", {})
-            
-            reasoning_text = f"""
-            <b>Rationale:</b> {reasoning.get('question_type_rationale')}<br/>
-            <b>Bloom's Level:</b> {q.get('blooms_level')} ({reasoning.get('blooms_level_justification')})<br/>
-            <b>Competency:</b> {kcm.get('competency_area')} - {kcm.get('competency_theme')}<br/>
-            <b>Relevance:</b> {q.get('relevance_percentage')}%
+    html_parts = ["""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <style>
+            %s
+            body {
+                font-family: %s;
+                font-size: 11pt;
+                line-height: 1.5;
+                color: #333;
+                margin: 40px;
+            }
+            h1 { font-size: 24pt; color: #2c3e50; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+            h2 { font-size: 18pt; color: #34495e; margin-top: 30px; }
+            h3 { font-size: 14pt; color: #7f8c8d; }
+            .audit-table { width: 100%%; border-collapse: collapse; margin-bottom: 20px; }
+            .audit-table th, .audit-table td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            .audit-table th { background-color: #f2f2f2; }
+            .question-block { margin-bottom: 25px; page-break-inside: avoid; }
+            .question-text { font-weight: bold; font-size: 12pt; margin-bottom: 8px; }
+            .options-list { list-style-type: none; padding-left: 20px; }
+            .options-list li { margin-bottom: 4px; }
+            .reasoning-box { background-color: #f8f9fa; border-left: 4px solid #3498db; padding: 10px; margin-top: 10px; font-size: 10pt; }
+            .correct { color: #27ae60; font-weight: bold; }
+        </style>
+    </head>
+    <body>
+        <h1>Course Assessment Report</h1>
+        
+        <p><b>Assessment Scope:</b> %s</p>
+        
+        <h3>Audit Information</h3>
+        <table class="audit-table">
+            <tr><th>Field</th><th>Value</th></tr>
+            <tr><td>Prompt Version</td><td>%s</td></tr>
+            <tr><td>API Version</td><td>%s</td></tr>
+        </table>
+        
+        <h2>Questions & Reasoning</h2>
+    """ % (font_faces, font_stack, scope, prompt_ver, api_ver)]
+
+    # Dynamic Questions
+    q_counter = 1
+    for q_type, q_list in questions_obj.items():
+        html_parts.append(f"<h3>{q_type} ({len(q_list)})</h3>")
+        
+        for q in q_list:
+            q_txt = q.get("question_text", "N/A")
+            q_html = f"""
+            <div class="question-block">
+                <div class="question-text">Q{q_counter}: {q_txt}</div>
             """
             
-            # Use a table to create a "box" effect
-            r_box = Table([[Paragraph(reasoning_text, styles["BodyText"])]], colWidths=[450])
-            r_box.setStyle(TableStyle([
-                ('BOX', (0,0), (-1,-1), 1, colors.grey),
-                ('BACKGROUND', (0,0), (-1,-1), colors.aliceblue),
-                ('PADDING', (0,0), (-1,-1), 8),
-            ]))
-            story.append(r_box)
-            story.append(Spacer(1, 20))
+            # Options / Body
+            if q_type == "Multiple Choice Question":
+                opts_html = "".join([f"<li>- {o.get('text', '')}</li>" for o in q.get("options", [])])
+                idx = q.get('correct_option_index')
+                q_html += f"<ul class='options-list'>{opts_html}</ul>"
+                q_html += f"<div class='correct'>Correct Answer: Option {idx}</div>"
             
-        story.append(PageBreak())
+            elif q_type == "MTF Question":
+                pairs_html = "".join([f"<li>- {p.get('left')} &rarr; {p.get('right')}</li>" for p in q.get("pairs", [])])
+                q_html += f"<ul class='options-list'>{pairs_html}</ul>"
+            
+            elif q_type == "Multi-Choice Question":
+                opts_html = "".join([f"<li>[ ] {o.get('text', '')}</li>" for o in q.get("options", [])])
+                corr = q.get('correct_option_index')
+                corr_str = ", ".join(map(str, corr)) if isinstance(corr, list) else str(corr)
+                q_html += f"<ul class='options-list'>{opts_html}</ul>"
+                q_html += f"<div class='correct'>Correct Options: {corr_str}</div>"
+            
+            elif q_type == "True/False Question":
+                q_html += "<ul class='options-list'><li>- True</li><li>- False</li></ul>"
+                q_html += f"<div class='correct'>Correct Answer: {q.get('correct_answer')}</div>"
+            
+            else:
+                q_html += f"<div class='correct'>Answer: {q.get('correct_answer')}</div>"
 
-    doc.build(story)
+            # Reasoning Box
+            rs = q.get("reasoning", {})
+            kcm = rs.get("competency_alignment", {}).get("kcm", {})
+            
+            q_html += f"""
+                <div class="reasoning-box">
+                    <b>Rationale:</b> {rs.get('question_type_rationale')}<br/>
+                    <b>Bloom's Level:</b> {q.get('blooms_level')} ({rs.get('blooms_level_justification')})<br/>
+                    <b>Competency:</b> {kcm.get('competency_area')} - {kcm.get('competency_theme')}<br/>
+                    <b>Relevance:</b> {q.get('relevance_percentage')}%
+                </div>
+            </div>
+            """
+            html_parts.append(q_html)
+            q_counter += 1
+
+    html_parts.append("</body></html>")
+    return "\n".join(html_parts)
+
+def generate_pdf(assessment_data: dict, output_path: Path):
+    """Generates a PDF report using WeasyPrint (HTML-to-PDF)."""
+    try:
+        html_content = generate_html_content(assessment_data)
+        font_config = FontConfiguration()
+        HTML(string=html_content).write_pdf(target=str(output_path), font_config=font_config)
+        logger.info(f"Generated PDF with WeasyPrint: {output_path}")
+    except Exception as e:
+        logger.error(f"WeasyPrint PDF Generation Failed: {e}")
+        # Fallback? No, fail explicitly is better than bad boxes.
+        raise
 
 
 def generate_docx(assessment_data: dict, output_path: Path):
