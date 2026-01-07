@@ -60,7 +60,7 @@ if course_id or use_custom:
         # Step 1: Core Config
         col1, col2, col3 = st.columns(3)
         with col1:
-            assessment_type = st.selectbox("Assessment Type", ["practice", "final", "comprehensive"])
+            assessment_type = st.selectbox("Assessment Type", ["practice", "final", "comprehensive", "standalone"])
         with col2:
             difficulty = st.selectbox("Difficulty", ["beginner", "intermediate", "advanced"], index=1)
         with col3:

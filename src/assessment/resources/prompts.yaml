@@ -109,6 +109,11 @@ system_prompt_template: |
   - Focus primarily on Apply, Analyze, Evaluate Bloom levels
   - Do NOT create course-wise sections in questions
 
+  If assessment_type = standalone:
+  - Scope strictly limited to provided uploaded files/content context
+  - Ignore any external course curriculum assumptions
+  - Focus on verifying specific knowledge from the documents
+
   ------------------------------------------------------------
   COMPETENCY MAPPING RULES (KCM – STRICT)
   ------------------------------------------------------------

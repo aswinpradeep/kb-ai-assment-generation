@@ -73,6 +73,7 @@ class AssessmentType(str, Enum):
     PRACTICE = "practice"
     FINAL = "final"
     COMPREHENSIVE = "comprehensive"
+    STANDALONE = "standalone"
 
 class Difficulty(str, Enum):
     BEGINNER = "beginner"
@@ -124,9 +125,10 @@ async def generate(
     valid_files = []
     if files:
         for f in files:
-            if isinstance(f, UploadFile):
+            # Check for invalid strings (Swagger UI "string" default)
+            # Accept anything else (Starlette UploadFile, FastAPI UploadFile)
+            if not isinstance(f, str):
                 valid_files.append(f)
-            # Ignore strings (like 'string' or empty string from Swagger/CURL)
     
     files = valid_files
 
@@ -222,6 +224,7 @@ async def generate(
             with open(file_path, "wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
             saved_files.append(file_path)
+            logger.info(f"Successfully saved uploaded file: {file.filename} to {file_path}")
 
     background_tasks.add_task(
         process_course_task, 
