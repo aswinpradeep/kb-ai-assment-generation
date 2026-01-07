@@ -103,7 +103,7 @@ class QuestionType(str, Enum):
 @api_v1_router.post("/generate")
 async def generate(
     background_tasks: BackgroundTasks,
-    course_ids: List[str] = Form(..., description="List of Course IDs (or comma-separated string)"),
+    course_ids: Optional[List[str]] = Form(None, description="List of Course IDs (or comma-separated string)"),
     force: bool = Form(False),
     assessment_type: AssessmentType = Form(...),
     difficulty: Difficulty = Form(...),
@@ -137,9 +137,14 @@ async def generate(
     
     # Parse List Inputs (Support both List[str] and comma-separated string fallback)
     c_ids = []
-    for item in course_ids:
-        c_ids.extend([c.strip() for c in item.split(",") if c.strip()])
+    if course_ids:
+        for item in course_ids:
+            c_ids.extend([c.strip() for c in item.split(",") if c.strip()])
     
+    # Validation: Must have Content
+    if not c_ids and not valid_files:
+        raise HTTPException(status_code=400, detail="Must provide either Course ID(s) or Uploaded Files.")
+
     q_types = []
     for item in question_types:
         q_types.extend([q.strip().lower() for q in item.split(",") if q.strip()])
@@ -189,8 +194,12 @@ async def generate(
     param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
 
     # Composite Key for Caching (Sorted course IDs + Hash)
-    sorted_ids = sorted(c_ids)
-    base_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
+    if c_ids:
+        sorted_ids = sorted(c_ids)
+        base_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
+    else:
+        base_id = "custom_upload"
+        
     composite_id = f"{base_id}_{param_hash}"
 
     existing = await get_assessment_status(composite_id)
@@ -204,8 +213,9 @@ async def generate(
     
     saved_files = []
     if files:
-        # Use first course ID for temp storage to avoid complex path logic
-        temp_dir = Path(INTERACTIVE_COURSES_PATH) / sorted_ids[0] / "uploads"
+        # Use first course ID for temp storage OR 'custom_uploads' folder if no course ID
+        storage_folder_name = sorted_ids[0] if c_ids else "custom_uploads"
+        temp_dir = Path(INTERACTIVE_COURSES_PATH) / storage_folder_name / "uploads"
         temp_dir.mkdir(parents=True, exist_ok=True)
         for file in files:
             file_path = temp_dir / file.filename

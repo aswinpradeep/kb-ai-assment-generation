@@ -19,29 +19,39 @@ st.set_page_config(page_title="Assessment Generator v3.3", layout="wide")
 
 st.title("Course Assessment Generator (Prompt v3.3)")
 
-course_id = st.text_input("Enter Course ID", placeholder="do_1234567890")
+col_input, col_mode = st.columns([3, 1])
+with col_mode:
+    use_custom = st.checkbox("Upload Only Mode", help="Generate from uploaded files without a Course ID")
 
-if course_id:
+with col_input:
+    if use_custom:
+        st.info("Upload-only mode active. Please upload files below.")
+        course_id = ""
+    else:
+        course_id = st.text_input("Enter Course ID", placeholder="do_1234567890")
+
+if course_id or use_custom:
     # Use active job ID from session if available (for polling), otherwise input ID (for initial check)
     current_job_id = st.session_state.get('active_job_id', course_id)
     
     # Check Status
-    try:
-        resp = requests.get(f"{API_URL}/status/{current_job_id}")
-        
-        if resp.status_code == 404:
-            st.info("No assessment found for this course.")
-            status = "NOT_FOUND"
-        else:
-            data = resp.json()
-            status = data.get("status")
-            st.write(f"**Current Status:** {status}")
-            if status == "FAILED":
-                st.error(f"Error: {data.get('error_message')}")
-
-    except requests.exceptions.ConnectionError:
-        st.error("Backend API is not running. Please start the FastAPI server.")
-        st.stop()
+    status = "NOT_FOUND" # Default start state
+    if current_job_id:
+        try:
+            resp = requests.get(f"{API_URL}/status/{current_job_id}")
+            
+            if resp.status_code == 404:
+                # st.info("No assessment found for this course.") 
+                status = "NOT_FOUND"
+            elif resp.status_code == 200:
+                data = resp.json()
+                status = data.get("status")
+                st.write(f"**Current Status:** {status}")
+                if status == "FAILED":
+                    st.error(f"Error: {data.get('error_message')}")
+        except requests.exceptions.ConnectionError:
+            st.error("Backend API is not running. Please start the FastAPI server.")
+            st.stop()
 
     # Actions based on status
     if status == "NOT_FOUND" or status == "FAILED" or (status == "COMPLETED" and st.checkbox("Force Regenerate")):

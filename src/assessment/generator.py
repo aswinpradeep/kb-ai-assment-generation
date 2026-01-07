@@ -80,12 +80,19 @@ async def generate_assessment(
     if not course_ids and course_folder:
         course_ids = [course_folder.name]
     
-    if not course_ids:
-        raise ValueError("No course_ids provided.")
+    # Normalize inputs
+    if not course_ids and course_folder:
+        course_ids = [course_folder.name]
+    
+    # if not course_ids:
+    #     raise ValueError("No course_ids provided.")
 
     # Create Deterministic Composite Key for Caching (Sorted IDs)
-    sorted_ids = sorted(course_ids)
-    composite_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
+    if course_ids:
+        sorted_ids = sorted(course_ids)
+        composite_id = f"comprehensive_{'_'.join(sorted_ids)}" if len(sorted_ids) > 1 else sorted_ids[0]
+    else:
+        composite_id = "custom_content_generation"
     
     # Base Path for Interactive Courses (should probably be passed in, but using config implied path for now)
     base_path = Path("/app/interactive_courses_data") 
@@ -100,54 +107,62 @@ async def generate_assessment(
     # Deduplication Set (to prevent double-handling of leaf vs root downloads)
     seen_content_hashes = set()
 
-    for cid in course_ids:
-        c_path = base_path / cid
-        if not c_path.exists():
-            logger.warning(f"Course folder {cid} not found, skipping.")
-            continue
-            
-        # Metadata
-        meta_path = c_path / "metadata.json"
-        if meta_path.exists():
-            meta = json.loads(meta_path.read_text(encoding='utf-8'))
-            aggregated_metadata["courses"].append(meta)
-            
-        # Transcript (Recursive - find all english_subtitles.vtt in subfolders)
-        for vtt_path in c_path.rglob("english_subtitles.vtt"):
-             try:
-                 text = await extract_vtt_text(vtt_path)
-                 if not text: continue
-                 
-                 # Deduplication Check
-                 text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-                 if text_hash in seen_content_hashes:
-                     logger.info(f"Skipping duplicate VTT content: {vtt_path.name}")
-                     continue
-                 seen_content_hashes.add(text_hash)
-                 
-                 rel_path = vtt_path.relative_to(c_path)
-                 combined_transcript.append(f"--- SOURCE: {cid} / {rel_path} ---\n{text}")
-             except Exception as e:
-                 logger.warning(f"Failed to read VTT {vtt_path}: {e}")
-            
-        # PDFs (Recursive - find all PDFs in subfolders)
-        for pdf_file in c_path.rglob("*.pdf"):
-             # Avoid reading the same file if multiple symlinks or structure exists
-             try:
-                text = await extract_pdf_text(pdf_file)
-                if not text: continue
-
-                # Deduplication Check
-                text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
-                if text_hash in seen_content_hashes:
-                    logger.info(f"Skipping duplicate PDF content: {pdf_file.name}")
-                    continue
-                seen_content_hashes.add(text_hash)
-
-                rel_path = pdf_file.relative_to(c_path)
-                combined_pdfs.append(f"--- SOURCE: {cid} / {rel_path} ---\n{text}")
-             except Exception as e:
-                 logger.warning(f"Failed to read PDF {pdf_file}: {e}")
+    if course_ids:
+        for cid in course_ids:
+            c_path = base_path / cid
+            if not c_path.exists():
+                logger.warning(f"Course folder {cid} not found, skipping.")
+                continue
+                
+            # Metadata
+            meta_path = c_path / "metadata.json"
+            if meta_path.exists():
+                meta = json.loads(meta_path.read_text(encoding='utf-8'))
+                aggregated_metadata["courses"].append(meta)
+                
+            # Transcript (Recursive - find all english_subtitles.vtt in subfolders)
+            for vtt_path in c_path.rglob("english_subtitles.vtt"):
+                 try:
+                     text = await extract_vtt_text(vtt_path)
+                     if not text: continue
+                     
+                     # Deduplication Check
+                     text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+                     if text_hash in seen_content_hashes:
+                         logger.info(f"Skipping duplicate VTT content: {vtt_path.name}")
+                         continue
+                     seen_content_hashes.add(text_hash)
+                     
+                     rel_path = vtt_path.relative_to(c_path)
+                     combined_transcript.append(f"--- SOURCE: {cid} / {rel_path} ---\n{text}")
+                 except Exception as e:
+                     logger.warning(f"Failed to read VTT {vtt_path}: {e}")
+                
+            # PDFs (Recursive - find all PDFs in subfolders)
+            for pdf_file in c_path.rglob("*.pdf"):
+                 # Avoid reading the same file if multiple symlinks or structure exists
+                 try:
+                    text = await extract_pdf_text(pdf_file)
+                    if not text: continue
+    
+                    # Deduplication Check
+                    text_hash = hashlib.md5(text.encode('utf-8')).hexdigest()
+                    if text_hash in seen_content_hashes:
+                        logger.info(f"Skipping duplicate PDF content: {pdf_file.name}")
+                        continue
+                    seen_content_hashes.add(text_hash)
+    
+                    rel_path = pdf_file.relative_to(c_path)
+                    combined_pdfs.append(f"--- SOURCE: {cid} / {rel_path} ---\n{text}")
+                 except Exception as e:
+                     logger.warning(f"Failed to read PDF {pdf_file}: {e}")
+    else:
+        # Dummy Metadata for Custom Uploads
+        aggregated_metadata["courses"].append({
+             "name": "User Uploaded Content", 
+             "code": "CUSTOM_UPLOAD", 
+             "description": "Assessment generated from user provided files (PDF/VTT)."
+         })
 
     # Process Extra Uploaded Files (from API)
     if extra_files:
